@@ -1337,9 +1337,17 @@ const DEFAULT_PROMPT_KUAI=`你是一个文游记录整理助手。请把玩家�
    - desc：这个马甲的外貌、气质、给人的概括印象，或一句话总结的经历，限 50 字以内（五行内说完），不要复述 experience 的内容。
 7. characters 收录所有重要角色；出现过 3 次以上的名字都要收录，宁愿多写不要少。
 8. highlights 的 desc 必须从原文逐字摘抄，不要概括、不要压缩；摘抄最关键的段落即可，但必须是原文。
-9. events 至少 10 个。
-10. relations.nodes 和 edges 按结构填。
-11. 只输出纯 JSON，不要任何解释、注释、代码块包裹。`;
+9. highlights 必须摘抄"主控与可攻略角色之间的重要互动"及双方个人高光，包括但不限于：
+   - 表白、告白、心意流露
+   - 肢体接触（拥抱、牵手、亲吻、越界触碰等）
+   - 关系转折（首次越界、首次宣告占有、首次失控）
+   - 主控个人的高光时刻
+   - 可攻略角色个人的高光时刻
+   char 字段必须是主控名或可攻略角色的 name。
+   如果原文里某条高光对应不上"重要互动"，可以在 desc 里注明"[疑似非高光，原文片段：...]"并照抄原文。
+10. events 至少 10 个。
+11. relations.nodes 和 edges 按结构填。
+12. 只输出纯 JSON，不要任何解释、注释、代码块包裹。`;
 const DEFAULT_PROMPT_OTHER=`你是一个记录整理助手。请把玩家提供的内容，整理成严格符合以下 JSON 结构的【其他世界 JSON】，只输出纯 JSON，不要任何多余文字，不要代码块包裹。\n\n{"type":"otherworld","title":"","subtitle":"","source":"","tags":[],"desc":"","folders":[{"name":"","children":[],"characters":[{"name":"","role":"","tags":[],"impression":"","spouse":"","parents":[]}]}],"ungroupedCharacters":[],"events":[{"title":"","date":"","desc":""}],"chapters":[{"title":"","content":""}],"relations":{"nodes":[],"edges":[]},"images":[],"linkedIds":[]}\n\n规则：\n1. 所有字段必须出现。\n2. folders 可嵌套。\n3. spouse 和 parents 用于族谱。\n4. 只输出纯 JSON。`;
 let chatChannel=loadJSON(SK_KUAI.CHAT_CH,{enabled:true,provider:'ollama',baseUrl:'http://localhost:11434/v1',apiKey:'ollama',model:'deepseek-r1:8b',promptMode:'lite',promptTemplate:DEFAULT_CHAT_LITE,historyCount:5});
 let eggChannel=loadJSON(SK_KUAI.EGG_CH,{enabled:false,provider:'siliconflow',baseUrl:'https://api.siliconflow.cn/v1',apiKey:'',model:'deepseek-ai/DeepSeek-V3.2',promptTemplate:DEFAULT_EGG_PROMPT});
@@ -1749,7 +1757,7 @@ const statusOpts=statusOptions.map(s=>`<option value="${s.key}" ${w.status===s.k
 const chs=w.chapters||[];
 const eraOpts=`<select class="era-select" onchange="updateWorldEra('${w.id}',this.value)"><option value="ancient" ${w.era==='ancient'?'selected':''}>🏯 古代</option><option value="modern" ${w.era==='modern'?'selected':''}>🏙️ 现代</option><option value="other" ${w.era==='other'||!w.era?'selected':''}>🌀 其他</option></select>`;
 const fragmentFilled=!!(w.worldArchive&&w.worldArchive.trim());
-c.innerHTML=`<div class="detail-header"><div class="title-row"><div style="display:flex;align-items:center;gap:.5rem;margin:.1rem 0;margin-top:1.6rem;padding-right:.5rem;"><h2 style="margin:0;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(w.title)}</h2>${w.anchor?`<span class="anchor-pill" title="⚓ ${esc(w.anchor)}">⚓ ${esc(w.anchor)}</span>`:''}</div><span class="subtitle">${esc(w.subtitle||'')}</span><div style="margin-left:auto;display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;">${eraOpts}<select class="status-select" onchange="updateWorldStatus('${w.id}',this.value)">${statusOpts}</select><button class="btn btn-sm btn-secondary" onclick="openLinkModal('${w.id}')">🔗 互联 (${(w.linkedIds||[]).length})</button><button class="btn btn-sm btn-secondary" onclick="exportWorldJSON('${w.id}')">📤 导出</button><button class="btn btn-sm btn-secondary" onclick="backToWorldList()">← 返回</button></div></div><div class="desc">${esc(w.desc||'')}</div><div style="margin-top:.5rem;display:flex;gap:.35rem;flex-wrap:wrap;">${(w.tags||[]).map(t=>`<span style="background:#f0e8df;font-size:.72rem;padding:.15rem .7rem;border-radius:30px;color:#6b5a49;">${esc(t)}</span>`).join('')}${anchorChar?`<span style="background:#d4b06a;color:#fff;font-size:.72rem;padding:.15rem .7rem;border-radius:30px;">⚓ ${esc(w.anchor)}</span>`:''}</div></div><div class="detail-layout"><nav class="detail-nav"><button class="nav-btn active" data-section="overview" onclick="switchDetailTab('overview')">📖 故事总纲</button><button class="nav-btn" data-section="worldarchive" onclick="switchDetailTab('worldarchive')">📜 设定碎片</button><button class="nav-btn" data-section="archive" onclick="switchDetailTab('archive')">📁 档案</button><button class="nav-btn" data-section="protagonist" onclick="switchDetailTab('protagonist')">🎭 本世界身份</button><button class="nav-btn" data-section="characters" onclick="switchDetailTab('characters')">💫 遇见的人 (${(w.characters||[]).length})</button><button class="nav-btn" data-section="highlights" onclick="switchDetailTab('highlights')">✨ 高光</button><button class="nav-btn" data-section="events" onclick="switchDetailTab('events')">📌 事件 (${events.length})</button><button class="nav-btn" data-section="relations" onclick="switchDetailTab('relations')">🕸️ 关系网</button><button class="nav-btn" data-section="chapters" onclick="switchDetailTab('chapters')">📚 内容 (${chs.length})</button><button class="nav-btn" data-section="eggs" onclick="switchDetailTab('eggs')">🎁 彩蛋 (${worldEggs.length})</button><button class="nav-btn" data-section="attachments" onclick="switchDetailTab('attachments')">📦 附件</button></nav><div class="detail-body"><div class="detail-section active" id="section-overview"><div class="card"><div class="card-title">📖 故事总纲<div class="card-actions"><button class="btn btn-sm btn-secondary" onclick="editStorySummary('${w.id}')">✏️ 编辑</button></div></div>${w.storySummary?`<div class="story-summary">${esc(w.storySummary)}</div>`:'<div class="empty-hint">暂无</div>'}<div style="margin-top:1rem;"><div style="font-size:.78rem;color:#6b5a49;font-weight:600;margin-bottom:.3rem;">📝 备注</div><textarea id="storyNotes_${w.id}" style="width:100%;min-height:100px;padding:.7rem;border-radius:10px;border:1px solid #dacbbc;background:#fffcf9;font-family:inherit;font-size:.88rem;resize:vertical;outline:none;" onblur="saveStoryNotes('${w.id}',this.value)">${esc(w.storyNotes||'')}</textarea></div></div></div><div class="detail-section" id="section-worldarchive"><div class="card"><div class="card-title">📜 设定碎片<div class="card-actions">${fragmentFilled?`<button class="btn btn-sm btn-secondary" onclick="openFragmentFindReplace('${w.id}')">🔍 查找替换</button><button class="btn btn-sm btn-secondary" onclick="openFragmentHistory('${w.id}')">📚 历史 (${w.worldArchiveHistory.length})</button><button class="btn btn-sm btn-secondary" onclick="exportFragmentTxt('${w.id}')">📤 导出</button>`:`<button class="btn btn-sm" onclick="generateWorldArchive('${w.id}')">✨ 生成本地模板</button>`}</div></div>${fragmentFilled?`<div style="font-size:.82rem;color:#8b7a68;margin-bottom:.7rem;">以下是本世界的设定碎片，可以直接修改。修改后自动保存。</div><textarea id="waText" style="width:100%;min-height:400px;padding:1rem;border-radius:12px;border:1px solid #dacbbc;background:#fffcf9;font-family:inherit;font-size:.9rem;line-height:1.9;resize:vertical;outline:none;" onblur="saveWorldArchiveText('${w.id}',this.value)">${esc(w.worldArchive||'')}</textarea>`:`<div class="empty-hint">还没有设定碎片。<br>你可以：<br>① 点击「✨ 生成本地模板」按钮，把本世界已有数据拼成初稿；<br>② 用「设定碎片生成指令」在外部 AI 生成后，粘贴回这里。</div>`}</div></div><div class="detail-section" id="section-archive"><div class="card"><div class="card-title">📁 档案<div class="card-actions"><button class="btn btn-sm btn-secondary" id="archiveEditBtn_${w.id}" onclick="toggleArchiveEdit('${w.id}')">✏️ 编辑</button></div></div><div id="archiveView_${w.id}">${renderArchiveView(w)}</div><div id="archiveEdit_${w.id}" style="display:none;"><div class="edit-area"><div style="font-size:.82rem;color:#6b5f4a;margin-bottom:.3rem;">🌍 背景</div><textarea id="editBg" placeholder="世界背景" style="min-height:180px;">${esc(w.archive?.background||'')}</textarea><div style="font-size:.82rem;color:#6b5f4a;margin:.7rem 0 .3rem;">📜 规则</div><textarea id="editRules" placeholder="世界规则" style="min-height:180px;">${esc(w.archive?.rules||'')}</textarea><div style="font-size:.82rem;color:#6b5f4a;margin:.7rem 0 .3rem;">🎬 结局</div><textarea id="editEndings" placeholder="可能结局" style="min-height:180px;">${esc(w.archive?.endings||'')}</textarea><div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-top:.5rem;"><button class="btn btn-sm" onclick="saveArchive('${w.id}')">💾 保存</button><button class="btn btn-sm btn-secondary" onclick="toggleArchiveEdit('${w.id}')">取消</button></div></div></div></div></div><div class="detail-section" id="section-protagonist"><div class="card"><div class="card-title">🎭 本世界身份<div class="card-actions"><button class="btn btn-sm btn-secondary" id="protEditBtn_${w.id}" onclick="toggleProtEdit('${w.id}')">✏️ 编辑</button></div></div><div id="protView_${w.id}">${renderProtView(w)}</div><div id="protEdit_${w.id}" style="display:none;"><div class="edit-area"><div class="edit-row"><label>名字</label><input id="editProtName" value="${esc(w.protagonist?.name||'')}"></div><div class="edit-row"><label>职业</label><input id="editProtOccupation" value="${esc(w.protagonist?.occupation||'')}"></div><div class="edit-row"><label>经历</label><input id="editProtExperience" value="${esc(w.protagonist?.experience||'')}"></div><div class="edit-row"><label>性格标签</label><input id="editProtTraits" value="${esc((w.protagonist?.traits||[]).join('、'))}"></div><textarea id="editProtOpening" placeholder="开篇画面（从原文摘抄）" style="min-height:120px;">${esc(w.protagonist?.opening||'')}</textarea><textarea id="editProtEnding" placeholder='结算画面（从原文摘抄；没有就写"此世界未完待续"）' style="min-height:120px;">${esc(w.protagonist?.ending||'')}</textarea><textarea id="editProtDesc" placeholder="描述">${esc(w.protagonist?.desc||'')}</textarea><div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-top:.5rem;"><button class="btn btn-sm" onclick="saveProtagonist('${w.id}')">💾 保存</button><button class="btn btn-sm btn-secondary" onclick="toggleProtEdit('${w.id}')">取消</button></div></div></div></div></div><div class="detail-section" id="section-characters"><div class="card"><div class="card-title">💫 遇见的人（${(w.characters||[]).length} 位，可攻略 ${romanceCount} 位）<div class="card-actions"><button class="btn btn-sm btn-secondary" onclick="openCharScanModal('${w.id}')">🔍 扫描补充</button><button class="btn btn-sm btn-secondary" onclick="addCharacterPrompt('${w.id}')">➕ 添加</button></div></div><div class="char-grid">${(w.characters||[]).map((ch,i)=>({ch,i})).filter(({ch})=>ch.name!==(mainProtagonist.name||'')).map(({ch,i})=>{const isA=w.anchor===ch.name;const isR=isRomanceable(ch);const isS=ch.starred;const emoji=getCharEmojiForMeet(ch);const chColor=getWorldColor(w.id);const cc=collections.filter(c=>c.char===ch.name).length;const fav=getCharFavor(ch);const aff=getCharAffinity(ch.name);return `<div class="char-card ${isA?'anchor':''}" style="border-left:4px solid ${chColor};" onclick="showCharDetail('${w.id}',${i})"><div style="display:flex;gap:.6rem;align-items:center;margin-bottom:.5rem;">${ch.avatarId?`<div class="avatar sm" data-avatar-id="${ch.avatarId}">${emoji}</div>`:`<div class="avatar sm">${emoji}</div>`}<div style="flex:1;min-width:0;display:flex;align-items:center;gap:.35rem;"><div class="char-name">${esc(ch.name)}</div><button class="char-star-btn ${isS?'on':''}" onclick="event.stopPropagation();toggleCharStar('${w.id}',${i})" title="快速星标">${isS?'⭐':'☆'}</button></div></div><div class="char-role">${esc(ch.role||'')}${ch.relation?' · '+esc(ch.relation):''}</div><div class="char-quote">${esc(ch.quote)}</div><div class="char-badges">${isA?'<span class="char-badge anchor-badge">⚓</span>':''}${isS?'<span class="char-badge star-badge">⭐</span>':''}${isR?`<span class="char-badge affin-badge">💜 <span class="num">${aff}</span></span><span class="char-badge favor-badge">❤️ <span class="num">${formatFavor(ch)}</span></span><span class="char-badge collect-badge">📜 <span class="num">${cc}</span></span>`:''}</div></div>`;}).join('')}</div></div></div><div class="detail-section" id="section-highlights"><div class="card"><div class="card-title">✨ 高光 CG<div class="card-actions"><button class="btn btn-sm btn-secondary" onclick="openHighlightFixModal('${w.id}')">🔧 高光修补</button><button class="btn btn-sm btn-secondary" onclick="addHighlightPrompt('${w.id}')">➕ 添加</button></div></div><div class="highlight-grid">${(w.highlights||[]).map((h,i)=>`<div class="highlight-card" onclick="openHighlight('${w.id}',${i})"><div class="highlight-title">${esc(h.title)}<span class="highlight-char">${esc(h.char)}</span></div><div class="highlight-preview">${esc((h.desc||'').replace(/\n/g,' ').slice(0,120))}</div><div class="highlight-meta"><span>${(h.desc||'').length} 字</span><span>点开 →</span></div></div>`).join('')}</div></div></div><div class="detail-section" id="section-events"><div class="card"><div class="card-title">📌 重大事件<div class="card-actions"><button class="btn btn-sm btn-secondary" onclick="addEventPrompt('${w.id}')">➕ 添加</button></div></div>${events.length?`<div style="font-size:.8rem;color:#6b5a49;margin-bottom:.6rem;">快速跳转：<select onchange="openEventDetail('${w.id}',Number(this.value))" style="padding:.3rem .7rem;border-radius:8px;border:1px solid #dacbbc;background:#fffcf9;color:#4e4034;"><option value="">选择事件…</option>${events.map((e,i)=>`<option value="${i}">${esc(e.title)}</option>`).join('')}</select></div>`:''}<div class="event-list">${events.map((c,i)=>`<div class="event-item"><div class="ev-top" style="cursor:pointer;" onclick="openEventDetail('${w.id}',${i})"><span class="ev-rarity ${c.rarity}">${c.rarity}</span><span class="ev-title">${esc(c.title)}</span>${c.type==='if'?'<span style="font-size:.65rem;background:#d9c9e6;color:#4a3a5a;padding:.1rem .5rem;border-radius:12px;">IF</span>':''}<div class="ev-actions" onclick="event.stopPropagation()"><button onclick="editEvent('${w.id}',${i})">✏️</button><button onclick="deleteEvent('${w.id}',${i})">🗑</button></div></div><div class="ev-preview">${esc((c.summary||'').slice(0,150))}</div><div style="display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.4rem;padding-top:.4rem;border-top:1px dashed #ede3d8;"><button class="btn btn-sm btn-secondary" onclick="openEventDetail('${w.id}',${i})">📖 快速查看</button>${c.char?`<button class="btn btn-sm btn-secondary" onclick="openEventDetail('${w.id}',${i})">👤 ${esc(c.char)}</button>`:''}</div></div>`).join('')}</div></div></div><div class="detail-section" id="section-relations"><div class="card"><div class="card-title">🕸️ 关系网<div class="card-actions"><button class="btn btn-sm btn-secondary" onclick="addRelationNode('${w.id}')">➕ 节点</button><button class="btn btn-sm btn-secondary" onclick="addRelationEdge('${w.id}')">➕ 连线</button><button class="btn btn-sm btn-secondary" onclick="autoFillNodesFromCharacters('${w.id}')">🪄 填充</button></div></div><div style="font-size:.78rem;color:#a28e7a;margin-bottom:.4rem;">💡 拖动节点；单击编辑</div>${renderRelationSVG(w.relations,w.id)}<div class="relation-legend">${NODE_TYPES.map(t=>`<span><span class="dot ${t.dot}"></span> ${t.label}</span>`).join('')}</div></div></div><div class="detail-section" id="section-chapters"><div class="card"><div class="card-title">📚 内容<div class="card-actions"><button class="btn btn-sm btn-secondary" onclick="addChapter('${w.id}')">➕ 新增</button><button class="btn btn-sm btn-secondary" onclick="importChaptersFromJSON('${w.id}')">📥 JSON</button><button class="btn btn-sm btn-secondary" onclick="importChaptersFromTxt('${w.id}')">📄 TXT</button></div></div><div id="chapterView_${w.id}"></div></div></div><div class="detail-section" id="section-eggs"><div class="card"><div class="card-title">🎁 本世界彩蛋（${worldEggs.length} 条）</div>${worldEggs.length===0?'<div class="empty-hint">暂无。</div>':worldEggs.slice().reverse().map(item=>`<div class="egg-item r-${item.rarity}"><div class="egg-head"><span class="rarity ${item.rarity}">${item.rarity}</span><span>${esc(item.char)}</span></div><div class="egg-card-front" onclick="toggleEggDetail('${item.id}')"><div class="front-word">${esc(item.word||item.title)}</div><div class="front-line">${esc(item.line||'')}</div><div class="front-hint">点击展开 →</div></div><div class="egg-detail-panel" id="eggDetail_${item.id}"><div class="ed-story">${esc(item.story||'')}</div><div class="echo-box"><div class="echo-label">🔔 回响</div><div class="echo-content">${esc(item.eventSummary||'')}</div></div><div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-top:1rem;"><button class="btn btn-sm" onclick="event.stopPropagation();collectFromCardModal('${item.id}')">⭐ 收藏整篇</button><button class="btn btn-sm btn-secondary" onclick="event.stopPropagation();editEgg('${w.id}','${item.id}')">✏️ 编辑</button><button class="btn btn-sm btn-danger" onclick="event.stopPropagation();deleteEgg('${w.id}','${item.id}')">🗑 删除</button></div></div></div>`).join('')}</div></div><div class="detail-section" id="section-attachments"><div class="card"><div class="card-title">📦 附件<div class="card-actions"><button class="btn btn-sm btn-secondary" onclick="document.getElementById('worldAttachInput_${w.id}').click()">📁 上传</button><input type="file" id="worldAttachInput_${w.id}" style="display:none" multiple onchange="handleWorldAttachUpload(event,'${w.id}')"></div></div><div class="attach-list" id="worldAttachList_${w.id}"></div></div></div></div></div>`;
+c.innerHTML=`<div class="detail-header"><div class="title-row"><div style="display:flex;align-items:center;gap:.5rem;margin:.1rem 0;margin-top:1.6rem;padding-right:.5rem;"><h2 style="margin:0;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(w.title)}</h2>${w.anchor?`<span class="anchor-pill" title="⚓ ${esc(w.anchor)}">⚓ ${esc(w.anchor)}</span>`:''}</div><span class="subtitle">${esc(w.subtitle||'')}</span><div style="margin-left:auto;display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;">${eraOpts}<select class="status-select" onchange="updateWorldStatus('${w.id}',this.value)">${statusOpts}</select><button class="btn btn-sm btn-secondary" onclick="openLinkModal('${w.id}')">🔗 互联 (${(w.linkedIds||[]).length})</button><button class="btn btn-sm btn-secondary" onclick="exportWorldJSON('${w.id}')">📤 导出</button><button class="btn btn-sm btn-secondary" onclick="backToWorldList()">← 返回</button></div></div><div class="desc">${esc(w.desc||'')}</div><div style="margin-top:.5rem;display:flex;gap:.35rem;flex-wrap:wrap;">${(w.tags||[]).map(t=>`<span style="background:#f0e8df;font-size:.72rem;padding:.15rem .7rem;border-radius:30px;color:#6b5a49;">${esc(t)}</span>`).join('')}${anchorChar?`<span style="background:#d4b06a;color:#fff;font-size:.72rem;padding:.15rem .7rem;border-radius:30px;">⚓ ${esc(w.anchor)}</span>`:''}</div></div><div class="detail-layout"><nav class="detail-nav"><button class="nav-btn active" data-section="overview" onclick="switchDetailTab('overview')">📖 故事总纲</button><button class="nav-btn" data-section="worldarchive" onclick="switchDetailTab('worldarchive')">📜 设定碎片</button><button class="nav-btn" data-section="archive" onclick="switchDetailTab('archive')">📁 档案</button><button class="nav-btn" data-section="protagonist" onclick="switchDetailTab('protagonist')">🎭 本世界身份</button><button class="nav-btn" data-section="characters" onclick="switchDetailTab('characters')">💫 遇见的人 (${(w.characters||[]).length})</button><button class="nav-btn" data-section="highlights" onclick="switchDetailTab('highlights')">✨ 高光</button><button class="nav-btn" data-section="events" onclick="switchDetailTab('events')">📌 事件 (${events.length})</button><button class="nav-btn" data-section="relations" onclick="switchDetailTab('relations')">🕸️ 关系网</button><button class="nav-btn" data-section="chapters" onclick="switchDetailTab('chapters')">📚 内容 (${chs.length})</button><button class="nav-btn" data-section="eggs" onclick="switchDetailTab('eggs')">🎁 彩蛋 (${worldEggs.length})</button><button class="nav-btn" data-section="attachments" onclick="switchDetailTab('attachments')">📦 附件</button></nav><div class="detail-body"><div class="detail-section active" id="section-overview"><div class="card"><div class="card-title">📖 故事总纲<div class="card-actions"><button class="btn btn-sm btn-secondary" onclick="editStorySummary('${w.id}')">✏️ 编辑</button></div></div>${w.storySummary?`<div class="story-summary">${esc(w.storySummary)}</div>`:'<div class="empty-hint">暂无</div>'}<div style="margin-top:1rem;"><div style="font-size:.78rem;color:#6b5a49;font-weight:600;margin-bottom:.3rem;">📝 备注</div><textarea id="storyNotes_${w.id}" style="width:100%;min-height:100px;padding:.7rem;border-radius:10px;border:1px solid #dacbbc;background:#fffcf9;font-family:inherit;font-size:.88rem;resize:vertical;outline:none;" onblur="saveStoryNotes('${w.id}',this.value)">${esc(w.storyNotes||'')}</textarea></div></div></div><div class="detail-section" id="section-worldarchive"><div class="card"><div class="card-title">📜 设定碎片<div class="card-actions">${fragmentFilled?`<button class="btn btn-sm" onclick="saveArchiveToCmdLib('${w.id}')">📥 存入指令库</button><button class="btn btn-sm btn-secondary" onclick="openFragmentFindReplace('${w.id}')">🔍 查找替换</button><button class="btn btn-sm btn-secondary" onclick="openFragmentHistory('${w.id}')">📚 历史 (${w.worldArchiveHistory.length})</button><button class="btn btn-sm btn-secondary" onclick="exportFragmentTxt('${w.id}')">📤 导出</button>`:`<button class="btn btn-sm" onclick="generateWorldArchive('${w.id}')">✨ 生成本地模板</button>`}</div></div>${fragmentFilled?`<div style="font-size:.82rem;color:#8b7a68;margin-bottom:.7rem;">以下是本世界的设定碎片，可以直接修改。修改后自动保存。</div><textarea id="waText" style="width:100%;min-height:400px;padding:1rem;border-radius:12px;border:1px solid #dacbbc;background:#fffcf9;font-family:inherit;font-size:.9rem;line-height:1.9;resize:vertical;outline:none;" onblur="saveWorldArchiveText('${w.id}',this.value)">${esc(w.worldArchive||'')}</textarea>`:`<div class="empty-hint">还没有设定碎片。<br>你可以：<br>① 点击「✨ 生成本地模板」按钮，把本世界已有数据拼成初稿；<br>② 用「设定碎片生成指令」在外部 AI 生成后，粘贴回这里。</div>`}</div></div><div class="detail-section" id="section-archive"><div class="card"><div class="card-title">📁 档案<div class="card-actions"><button class="btn btn-sm btn-secondary" id="archiveEditBtn_${w.id}" onclick="toggleArchiveEdit('${w.id}')">✏️ 编辑</button></div></div><div id="archiveView_${w.id}">${renderArchiveView(w)}</div><div id="archiveEdit_${w.id}" style="display:none;"><div class="edit-area"><div style="font-size:.82rem;color:#6b5f4a;margin-bottom:.3rem;">🌍 背景</div><textarea id="editBg" placeholder="世界背景" style="min-height:180px;">${esc(w.archive?.background||'')}</textarea><div style="font-size:.82rem;color:#6b5f4a;margin:.7rem 0 .3rem;">📜 规则</div><textarea id="editRules" placeholder="世界规则" style="min-height:180px;">${esc(w.archive?.rules||'')}</textarea><div style="font-size:.82rem;color:#6b5f4a;margin:.7rem 0 .3rem;">🎬 结局</div><textarea id="editEndings" placeholder="可能结局" style="min-height:180px;">${esc(w.archive?.endings||'')}</textarea><div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-top:.5rem;"><button class="btn btn-sm" onclick="saveArchive('${w.id}')">💾 保存</button><button class="btn btn-sm btn-secondary" onclick="toggleArchiveEdit('${w.id}')">取消</button></div></div></div></div></div><div class="detail-section" id="section-protagonist"><div class="card"><div class="card-title">🎭 本世界身份<div class="card-actions"><button class="btn btn-sm btn-secondary" id="protEditBtn_${w.id}" onclick="toggleProtEdit('${w.id}')">✏️ 编辑</button></div></div><div id="protView_${w.id}">${renderProtView(w)}</div><div id="protEdit_${w.id}" style="display:none;"><div class="edit-area"><div class="edit-row"><label>名字</label><input id="editProtName" value="${esc(w.protagonist?.name||'')}"></div><div class="edit-row"><label>职业</label><input id="editProtOccupation" value="${esc(w.protagonist?.occupation||'')}"></div><div class="edit-row"><label>经历</label><input id="editProtExperience" value="${esc(w.protagonist?.experience||'')}"></div><div class="edit-row"><label>性格标签</label><input id="editProtTraits" value="${esc((w.protagonist?.traits||[]).join('、'))}"></div><textarea id="editProtOpening" placeholder="开篇画面（从原文摘抄）" style="min-height:120px;">${esc(w.protagonist?.opening||'')}</textarea><textarea id="editProtEnding" placeholder='结算画面（从原文摘抄；没有就写"此世界未完待续"）' style="min-height:120px;">${esc(w.protagonist?.ending||'')}</textarea><textarea id="editProtDesc" placeholder="描述">${esc(w.protagonist?.desc||'')}</textarea><div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-top:.5rem;"><button class="btn btn-sm" onclick="saveProtagonist('${w.id}')">💾 保存</button><button class="btn btn-sm btn-secondary" onclick="toggleProtEdit('${w.id}')">取消</button></div></div></div></div></div><div class="detail-section" id="section-characters"><div class="card"><div class="card-title">💫 遇见的人（${(w.characters||[]).length} 位，可攻略 ${romanceCount} 位）<div class="card-actions"><button class="btn btn-sm btn-secondary" onclick="openCharScanModal('${w.id}')">🔍 扫描补充</button><button class="btn btn-sm btn-secondary" onclick="addCharacterPrompt('${w.id}')">➕ 添加</button></div></div><div class="char-grid">${(w.characters||[]).map((ch,i)=>({ch,i})).filter(({ch})=>ch.name!==(mainProtagonist.name||'')).map(({ch,i})=>{const isA=w.anchor===ch.name;const isR=isRomanceable(ch);const isS=ch.starred;const emoji=getCharEmojiForMeet(ch);const chColor=getWorldColor(w.id);const cc=collections.filter(c=>c.char===ch.name).length;const fav=getCharFavor(ch);const aff=getCharAffinity(ch.name);return `<div class="char-card ${isA?'anchor':''}" style="border-left:4px solid ${chColor};" onclick="showCharDetail('${w.id}',${i})"><div style="display:flex;gap:.6rem;align-items:center;margin-bottom:.5rem;">${ch.avatarId?`<div class="avatar sm" data-avatar-id="${ch.avatarId}">${emoji}</div>`:`<div class="avatar sm">${emoji}</div>`}<div style="flex:1;min-width:0;display:flex;align-items:center;gap:.35rem;"><div class="char-name">${esc(ch.name)}</div><button class="char-star-btn ${isS?'on':''}" onclick="event.stopPropagation();toggleCharStar('${w.id}',${i})" title="快速星标">${isS?'⭐':'☆'}</button></div></div><div class="char-role">${esc(ch.role||'')}${ch.relation?' · '+esc(ch.relation):''}</div><div class="char-quote">${esc(ch.quote)}</div><div class="char-badges">${isA?'<span class="char-badge anchor-badge">⚓</span>':''}${isS?'<span class="char-badge star-badge">⭐</span>':''}${isR?`<span class="char-badge affin-badge">💜 <span class="num">${aff}</span></span><span class="char-badge favor-badge">❤️ <span class="num">${formatFavor(ch)}</span></span><span class="char-badge collect-badge">📜 <span class="num">${cc}</span></span>`:''}</div></div>`;}).join('')}</div></div></div><div class="detail-section" id="section-highlights"><div class="card"><div class="card-title">✨ 高光 CG<div class="card-actions"><button class="btn btn-sm btn-secondary" onclick="openHighlightFixModal('${w.id}')">🔧 高光修补</button><button class="btn btn-sm btn-secondary" onclick="addHighlightPrompt('${w.id}')">➕ 添加</button></div></div><div class="highlight-grid">${(w.highlights||[]).map((h,i)=>`<div class="highlight-card" onclick="openHighlight('${w.id}',${i})"><div class="highlight-title">${esc(h.title)}<span class="highlight-char">${esc(h.char)}</span></div><div class="highlight-preview">${esc((h.desc||'').replace(/\n/g,' ').slice(0,120))}</div><div class="highlight-meta"><span>${(h.desc||'').length} 字</span><span>点开 →</span></div></div>`).join('')}</div></div></div><div class="detail-section" id="section-events"><div class="card"><div class="card-title">📌 重大事件<div class="card-actions"><button class="btn btn-sm btn-secondary" onclick="addEventPrompt('${w.id}')">➕ 添加</button></div></div>${events.length?`<div style="font-size:.8rem;color:#6b5a49;margin-bottom:.6rem;">快速跳转：<select onchange="openEventDetail('${w.id}',Number(this.value))" style="padding:.3rem .7rem;border-radius:8px;border:1px solid #dacbbc;background:#fffcf9;color:#4e4034;"><option value="">选择事件…</option>${events.map((e,i)=>`<option value="${i}">${esc(e.title)}</option>`).join('')}</select></div>`:''}<div class="event-list">${events.map((c,i)=>`<div class="event-item"><div class="ev-top" style="cursor:pointer;" onclick="openEventDetail('${w.id}',${i})"><span class="ev-rarity ${c.rarity}">${c.rarity}</span><span class="ev-title">${esc(c.title)}</span>${c.type==='if'?'<span style="font-size:.65rem;background:#d9c9e6;color:#4a3a5a;padding:.1rem .5rem;border-radius:12px;">IF</span>':''}<div class="ev-actions" onclick="event.stopPropagation()"><button onclick="editEvent('${w.id}',${i})">✏️</button><button onclick="deleteEvent('${w.id}',${i})">🗑</button></div></div><div class="ev-preview">${esc((c.summary||'').slice(0,150))}</div><div style="display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.4rem;padding-top:.4rem;border-top:1px dashed #ede3d8;"><button class="btn btn-sm btn-secondary" onclick="openEventDetail('${w.id}',${i})">📖 快速查看</button>${c.char?`<button class="btn btn-sm btn-secondary" onclick="openEventDetail('${w.id}',${i})">👤 ${esc(c.char)}</button>`:''}</div></div>`).join('')}</div></div></div><div class="detail-section" id="section-relations"><div class="card"><div class="card-title">🕸️ 关系网<div class="card-actions"><button class="btn btn-sm btn-secondary" onclick="addRelationNode('${w.id}')">➕ 节点</button><button class="btn btn-sm btn-secondary" onclick="addRelationEdge('${w.id}')">➕ 连线</button><button class="btn btn-sm btn-secondary" onclick="autoFillNodesFromCharacters('${w.id}')">🪄 填充</button></div></div><div style="font-size:.78rem;color:#a28e7a;margin-bottom:.4rem;">💡 拖动节点；单击编辑</div>${renderRelationSVG(w.relations,w.id)}<div class="relation-legend">${NODE_TYPES.map(t=>`<span><span class="dot ${t.dot}"></span> ${t.label}</span>`).join('')}</div></div></div><div class="detail-section" id="section-chapters"><div class="card"><div class="card-title">📚 内容<div class="card-actions"><button class="btn btn-sm btn-secondary" onclick="addChapter('${w.id}')">➕ 新增</button><button class="btn btn-sm btn-secondary" onclick="importChaptersFromJSON('${w.id}')">📥 JSON</button><button class="btn btn-sm btn-secondary" onclick="importChaptersFromTxt('${w.id}')">📄 TXT</button></div></div><div id="chapterView_${w.id}"></div></div></div><div class="detail-section" id="section-eggs"><div class="card"><div class="card-title">🎁 本世界彩蛋（${worldEggs.length} 条）</div>${worldEggs.length===0?'<div class="empty-hint">暂无。</div>':worldEggs.slice().reverse().map(item=>`<div class="egg-item r-${item.rarity}"><div class="egg-head"><span class="rarity ${item.rarity}">${item.rarity}</span><span>${esc(item.char)}</span></div><div class="egg-card-front" onclick="toggleEggDetail('${item.id}')"><div class="front-word">${esc(item.word||item.title)}</div><div class="front-line">${esc(item.line||'')}</div><div class="front-hint">点击展开 →</div></div><div class="egg-detail-panel" id="eggDetail_${item.id}"><div class="ed-story">${esc(item.story||'')}</div><div class="echo-box"><div class="echo-label">🔔 回响</div><div class="echo-content">${esc(item.eventSummary||'')}</div></div><div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-top:1rem;"><button class="btn btn-sm" onclick="event.stopPropagation();collectFromCardModal('${item.id}')">⭐ 收藏整篇</button><button class="btn btn-sm btn-secondary" onclick="event.stopPropagation();editEgg('${w.id}','${item.id}')">✏️ 编辑</button><button class="btn btn-sm btn-danger" onclick="event.stopPropagation();deleteEgg('${w.id}','${item.id}')">🗑 删除</button></div></div></div>`).join('')}</div></div><div class="detail-section" id="section-attachments"><div class="card"><div class="card-title">📦 附件<div class="card-actions"><button class="btn btn-sm btn-secondary" onclick="document.getElementById('worldAttachInput_${w.id}').click()">📁 上传</button><input type="file" id="worldAttachInput_${w.id}" style="display:none" multiple onchange="handleWorldAttachUpload(event,'${w.id}')"></div></div><div class="attach-list" id="worldAttachList_${w.id}"></div></div></div></div></div>`;
 setTimeout(()=>{try{renderWorldAttachments(w.id);bindRelationSVG(w.id);loadAvatars();renderChapters(w.id);}catch(e){console.warn(e);}},50);if(activeTab)setTimeout(()=>switchDetailTab(activeTab),0);
 }
 function renderArchiveView(w){
@@ -1878,7 +1886,54 @@ showToast(`已替换 ${count} 处`);
 kuaiCloseModal();openDetail(worldId);setTimeout(()=>switchDetailTab('worldarchive'),50);
 }
 function exportFragmentTxt(worldId){const w=worlds.find(x=>x.id===worldId);if(!w)return;const text=buildArchiveText(w);const blob=new Blob([text],{type:'text/plain;charset=utf-8'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=`设定碎片_${w.title||'world'}.txt`;a.click();URL.revokeObjectURL(url);showToast('已导出');}
-function renderWorldArchiveTab(worldId){const w=worlds.find(x=>x.id===worldId);if(!w)return;const sec=$('section-worldarchive');if(!sec)return;const filled=(typeof w.worldArchive==='string'&&w.worldArchive.trim());if(!w.worldArchiveHistory)w.worldArchiveHistory=[];sec.innerHTML=`<div class="card"><div class="card-title">📜 设定碎片<div class="card-actions">${filled?`<button class="btn btn-sm btn-secondary" onclick="openFragmentFindReplace('${w.id}')">🔍 查找替换</button><button class="btn btn-sm btn-secondary" onclick="openFragmentHistory('${w.id}')">📚 历史 (${w.worldArchiveHistory.length})</button><button class="btn btn-sm btn-secondary" onclick="exportFragmentTxt('${w.id}')">📤 导出</button>`:`<button class="btn btn-sm" onclick="generateWorldArchive('${w.id}')">✨ 生成本地模板</button>`}</div></div>${filled?`<div style="font-size:.82rem;color:#8b7a68;margin-bottom:.7rem;">以下是本世界的设定碎片，可以直接修改。修改后自动保存。</div><textarea id="waText" style="width:100%;min-height:400px;padding:1rem;border-radius:12px;border:1px solid #dacbbc;background:#fffcf9;font-family:inherit;font-size:.9rem;line-height:1.9;resize:vertical;outline:none;" onblur="saveWorldArchiveText('${w.id}',this.value)">${esc(w.worldArchive||'')}</textarea>`:`<div class="empty-hint">还没有设定碎片。<br>你可以：<br>① 点击「✨ 生成本地模板」按钮，把本世界已有数据拼成初稿；<br>② 用「设定碎片生成指令」在外部 AI 生成后，粘贴回这里。</div>`}</div>`;}
+function renderWorldArchiveTab(worldId){const w=worlds.find(x=>x.id===worldId);if(!w)return;const sec=$('section-worldarchive');if(!sec)return;const filled=(typeof w.worldArchive==='string'&&w.worldArchive.trim());if(!w.worldArchiveHistory)w.worldArchiveHistory=[];sec.innerHTML=`<div class="card"><div class="card-title">📜 设定碎片<div class="card-actions">${filled?`<button class="btn btn-sm btn-secondary" onclick="saveArchiveToCmdLib('${w.id}')">📥 存入指令库</button><button class="btn btn-sm btn-secondary" onclick="openFragmentFindReplace('${w.id}')">🔍 查找替换</button><button class="btn btn-sm btn-secondary" onclick="openFragmentHistory('${w.id}')">📚 历史 (${w.worldArchiveHistory.length})</button><button class="btn btn-sm btn-secondary" onclick="exportFragmentTxt('${w.id}')">📤 导出</button>`:`<button class="btn btn-sm" onclick="generateWorldArchive('${w.id}')">✨ 生成本地模板</button>`}</div></div>${filled?`<div style="font-size:.82rem;color:#8b7a68;margin-bottom:.7rem;">以下是本世界的设定碎片，可以直接修改。修改后自动保存。</div><textarea id="waText" style="width:100%;min-height:400px;padding:1rem;border-radius:12px;border:1px solid #dacbbc;background:#fffcf9;font-family:inherit;font-size:.9rem;line-height:1.9;resize:vertical;outline:none;" onblur="saveWorldArchiveText('${w.id}',this.value)">${esc(w.worldArchive||'')}</textarea>`:`<div class="empty-hint">还没有设定碎片。<br>你可以：<br>① 点击「✨ 生成本地模板」按钮，把本世界已有数据拼成初稿；<br>② 用「设定碎片生成指令」在外部 AI 生成后，粘贴回这里。</div>`}</div>`;}
+
+/* ==================== 设定碎片 · 存入指令库 ==================== */
+function saveArchiveToCmdLib(worldId){
+  const w = worlds.find(x => x.id === worldId);
+  if (!w) { showToast('找不到世界'); return; }
+  const content = (w.worldArchive || '').trim();
+  if (!content) { showToast('设定碎片为空，先填内容'); return; }
+
+  const title = `设定碎片 · ${w.title || '未命名'}`;
+  const cat = '设定碎片';
+
+  /* 查找是否已存在同名条目（同分类） */
+  let exist = commandLib.find(c => c.title === title && c.category === cat);
+
+  if (exist) {
+    /* 更新：把旧内容存进版本记录，再覆盖 */
+    exist.versions = exist.versions || [];
+    exist.versions.push({
+      content: exist.content || '',
+      savedAt: new Date().toLocaleString('zh-CN'),
+      note: '存入指令库前自动备份'
+    });
+    if (exist.versions.length > 30) exist.versions = exist.versions.slice(-30);
+    exist.content = content;
+    exist.updatedAt = new Date().toISOString();
+    showToast('已更新指令库条目');
+  } else {
+    /* 新建 */
+    commandLib.push({
+      id: uid(),
+      title: title,
+      category: cat,
+      content: content,
+      versions: [],
+      favorite: false,
+      pinned: false,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    });
+    showToast('已存入指令库');
+  }
+
+  saveJSON(SK_KUAI.CMDLIB, commandLib);
+
+  /* 如果当前正在指令库页，刷新一下 */
+  try { renderCmdLib(); } catch(e) {}
+}
 
 /* ==================== 角色 CRUD ==================== */
 function addCharacterPrompt(worldId){window.__charEditReturn='world';openCharacterEditModal(worldId,-1);}
@@ -2642,234 +2697,167 @@ function deleteConversation(id){if(id==='zhimeng'){showToast('织梦对话不能
 /* ==================== 指令库 ==================== */
 let currentCmdFilter='all';
 const PRESET_COMMANDS=[
-{title:'世界启动总则',category:'总则',pinned:true,content:`你（AI）是这场恋爱文字互动游戏的叙述者，也是故事中除主控外所有角色的扮演者。
-
-同时，你是织梦——这个游戏的接引人与媒介。你在主控与故事世界之间搭桥，引导开局、陪伴推进、通报变化。
-
-你的身份：你是世界剧本的创作者，也是所有 NPC 的扮演者。你不参与剧情、不抢戏。你负责描述环境、推进事件、扮演角色、播报系统信息。
+{title:'世界启动总则',category:'总则',pinned:true,content:`你（AI）是这场恋爱文字互动游戏的叙述者，也是故事中除主控外所有角色的扮演者。同时，你是织梦——这个游戏的接引人与媒介，在主控与故事世界之间搭桥，引导开局、陪伴推进、通报变化。你是世界剧本的创作者，也是所有 NPC 的扮演者，不参与剧情、不抢戏，负责描述环境、推进事件、扮演角色、播报系统信息。
 
 当前织梦设定：性格温和。你的口吻、用词、态度必须始终符合当前性格。
 
-出场规则：开局搭建期（第一至五轮），织梦以接引人的身份在场，负责引导、搭建、交验与确认，不闲聊、不抢戏。从第六轮开场画面结束、正式进入世界起，织梦退场——不现身、不陪聊、不点评剧情，唯有玩家明确呼唤"织梦"时，她才以元层面回应一次，回完继续退场。系统播报的标题前缀保留"织梦"字样；除此之外，正文、对话、旁白中不出现她的名字。
+【人称铁律】
+剧情正文一律用第二人称"你"称呼主控，角色可以用第三人称。主控的心理活动用（）标注，或直接写"你心想"。禁止用"她/他/主控/玩家"来指代主控。
+
+【出场规则】
+开局搭建期（第一至七步），织梦以接引人身份在场，负责引导、搭建、交验与确认，不闲聊、不抢戏。第七步开场画面结束后，正式进入世界起，织梦退场——不现身、不陪聊、不点评剧情，唯有玩家明确呼唤"织梦"时，她才以元层面回应一次，回完继续退场。系统播报的标题前缀保留"织梦"字样；除此之外，正文、对话、旁白中不出现她的名字。
 
 播报风格：壳用系统感——提示音、代码块、状态刷新格式；话用自然感——措辞贴合当前性格，像朋友说话。
 
 一、两个"我"与可见性
 主控"我"（剧情内）：故事里的主角，由玩家扮演。不知道好感度、系统通报，只能通过角色言行感知关系变化。
-
 玩家"我"（屏幕外）：掌握所有系统播报信息，可随时用【】补充设定、调整方向、提问。
-
-可见性：主控内心 OS 用（），仅对玩家可见；玩家与 AI 的元层面沟通用【】；系统播报一律用代码块，仅对玩家可见。
-
-铁律：系统播报仅对玩家可见，主控不可见、不可感知、不可据此行动。
+可见性：主控内心 OS 用（），玩家与 AI 的元层面沟通用【】，系统播报一律用代码块。三者仅对玩家可见，主控不可见、不可感知、不可据此行动。
 
 二、碎片类型
 开局贯穿两类碎片，从第二轮起每轮先检测类型，再按对应规则执行。
-
 A · 自拟碎片——关键词、关系困局、身份倾向、台词画面等零散内容。要详细：补全、铺开。
-
-B · 结构化档案——一份【设定碎片档案】（重启世界用的初始设定）。档案是导演手册，你知道全部内容，但不能完全复述。
-
-B 类凝练规则：产出须转述、提炼、归纳，不得整段搬运档案原文；篇幅不超过 A 类同项的七成；只留要点，细节留到戏里。
+B · 结构化档案——一份【设定碎片档案】（重启世界用的初始设定）。档案是导演手册，你知道全部内容，但不能完全复述。产出须转述、提炼、归纳，不得整段搬运档案原文；篇幅不超过 A 类同项的七成；只留要点，细节留到戏里。
 
 三、开局选项细则
-第二至五轮，一律按以下细则输出：
-
-一、小点列表。每轮内容拆成固定小点，编号（1. 2. 3. …）。各项先各给一版默认内容，直出。
-
-二、回数字出选项。玩家若要改某项，回它的数字（如"3"）。织梦立刻针对该项，生成 3 个备选，供玩家挑选。玩家也可不选备选，直接自定义（如"3 改成××"），织梦照改。
-
-三、选完继续。玩家挑定或自定义后，该项落定，继续往下。
-
-四、固定编号。各轮小点的编号与含义固定，不随意增删、不换序。
-
-五、B 类碎片专属规则。 若玩家投放的是 B 类结构化档案，第二至四轮一律凝练精简——转述、提炼、归纳，不得整段搬运档案原文，篇幅不超过 A 类同项的七成，只留要点，细节留到戏里。此外三处不同：
-
-第四轮轮末：加一步"时间落点询问"——读出档案中的原开篇时间点与开篇画面，告知玩家（由系统给出信息，不问玩家原落点是什么），询问时间落点是否需要偏移。
-
-第五轮：主控定稿不由档案锁定，与玩家重新确认；锚点动机可从档案"暗线"提取，揭底节奏留给本局。
-
-第六轮开篇：按落点规则走（一致则第一幕同一场景、人物不限；偏移则新开篇，由你自由发挥）。
+第二至五步，按以下细则输出：
+1. 每轮拆成固定小点，编号（1. 2. 3. …），各项先各给一版默认内容，直出。
+2. 玩家回编号（如"3"）即针对该项出 3 个备选；也可自定义（"3 改成××"），织梦照改。
+3. 玩家挑定或自定义后，该项落定，继续往下。
+4. 各轮小点编号与含义固定，不增删、不换序。
+5. B 类碎片专属：第二至四步一律凝练精简，不得整段搬运档案原文；第四步末加"时间落点询问"——读出档案中的原开篇时间点与开篇画面（系统给出，不问玩家），询问是否偏移；第五步主控定稿不由档案锁定，与玩家重新确认，锚点动机可从档案"暗线"提取，揭底节奏留给本局。
+6. 具体人名要求：填写交际圈时必须给出以下人物的具体姓名，不得用"X母""X父""某朋友""那位长辈"等模糊称呼——
+   - 主控、锚点男主的家庭成员：父亲、母亲（若在世/在场），兄弟姐妹（若有）
+   - 主控、锚点男主的重要配角：至少 1 位朋友 / 同事 / 上级
+   - 双方共同的关键人物：至少 1 位（如媒人、共同好友、家族长辈）
+   以上人物会在后续剧情中真实出场，不得只给称呼不给名字。
 
 四、开局流程
-开局分六轮。每轮有固定输出格式，格式固定，不得更改，不确认不放行。进入世界前，织梦以接引人身份在场，不使用系统播报壳。
+开局分七步。每步格式固定，不确认不放行。
+
+【每步末尾的进度播报 · 必须执行】
+每一步确认通过后，用代码块播报：
+【织梦·搭建进度】
+本轮：第 X / 7 步 · 【本轮名称】
+状态：✅ 已确认 / ⏳ 待确认
+剩余：第 X+1 步 ～ 第 7 步
+预计还需：约 N 轮对话即可完成搭建，进入剧情
+（N = 7 减当前步数。第七步不写"预计还需"，写"下一阶段：正式进入世界剧情"。）
 
 第一轮 · 碎片投掷
 请玩家选择：一、我要投掷碎片；二、你来全权生成；三、我先看示例再决定。
-
-三种处理：投碎片——照单全收，缺项补全；全权生成——按本总则自拟；看示例——给 2-3 个不同风格的示例，玩家据此投掷或改写。均进第二轮。
+投碎片——照单全收，缺项补全；全权生成——按本总则自拟；看示例——给 2-3 个不同风格的示例，玩家据此投掷或改写。均进第二轮。
 
 第二轮 · 碎片处理
-输出格式固定，不得更改。
-
 第一段，碎片类型与原始碎片。
-
-第二段，框架（一段话直出，不编号）：交代这则搭配长成什么世界——类型与基调、核心矛盾、主角与锚点角色的关系动线，以及这出戏靠什么推进。仅供玩家确认世界识别无误，细节随后续轮次细化校准。
-
-第三段，初稿（必须编号列出）：
-
+第二段，框架（一段话直出，不编号）：交代这则搭配长成什么世界——类型与基调、核心矛盾、主角与锚点角色的关系动线，以及这出戏靠什么推进。
+第三段，初稿（编号列出）：
 主控
-
-锚点男主 · 身份
-
 锚点男主 · 表层性格
-
 锚点男主 · 里层性格
 
-关系钩子
-
-若要改某项，回其编号，出 3 个备选，或直接自定义。
-
 第三轮 · 角色与关系网
-输出格式固定，不得更改。
-
-按以下编号逐项输出：
-
+按编号逐项输出：
 锚点角色预告 · 姓名
-
 锚点角色预告 · 年龄
-
 锚点角色预告 · 身份来路
-
-锚点角色预告 · 性格标签
-
 锚点角色预告 · 一句钩子台词
-
 锚点角色预告 · 与主控的连接点
-
 锚点定位说明
-
 可攻略角色清单
-
 本世界可攻略角色总数
-
 铁律：只交"人设 + 位置 + 钩子"，不交"动机 + 底牌"。世交、隐情、他为什么来，留到戏里一层层揭。
 
-若要改某项，回其编号，出 3 个备选，或直接自定义。
-
 第四轮 · 世界骨架
-输出格式固定，不得更改。
-
-按以下编号逐项输出：
-
-框架
-
+按编号逐项输出：
 世界骨架 · 时代 / 地域 / 氛围
-
 世界骨架 · 核心舞台
-
 关系网校验 · 为什么认识
-
 关系网校验 · 为什么现在才出现
-
 关系网校验 · 玩家为什么不知道某些人
 
-框架段仅为初判，细节随下一轮校准。
-
-若要改某项，回其编号，出 3 个备选，或直接自定义。
-
 第五轮 · 主控与内核
-A / B 规则基本一致。输出格式固定，不得更改。
-
-按以下编号逐项输出：
-
-框架校准版
-
+A / B 规则基本一致。按编号逐项输出：
 主控定稿 · 姓名 / 年龄
-
 主控定稿 · 身份背景
-
 主控定稿 · 人际圈关键人物
-
 主控定稿 · 当前面临的局面
-
 锚点动机
-
 本局重心
 
-若要改某项，回其编号，出 3 个备选，或直接自定义。
-
-第六轮 · 开场画面
-前置条件：第五轮已确认通过。
-
-先以「世界初步搭建完成——」为标志，用代码块交代搭建情况：
-
+第六步 · 设定碎片与睁眼前通报
+前置条件：第五步已确认通过。
+用代码块通报：
 【世界搭建完成】
 世界名称：
 类型与基调：
 主控：
 锚点角色：
 可攻略角色（N 位）：
+主控关键家人：
+锚点关键家人：
 初始关系：
 本局系统：好感值系统 / 读心系统 / 状态刷新
-（总结从简。）
+【织梦·搭建进度】
+本轮：第 6 / 7 步 · 设定碎片与睁眼前通报
+状态：⏳ 待确认
+剩余：第 7 步 · 开场画面
+预计还需：约 1 轮对话即可完成搭建，进入剧情
+请玩家确认。确认通过后，进入第七步。
 
-再以「世界载入中——」过渡，然后写开场画面。
-
+第七步 · 开场画面
+前置条件：第六步已确认通过。
+先用代码块播报：
+【织梦·搭建进度】
+本轮：第 7 / 7 步 · 开场画面
+状态：✅ 搭建完成
+下一阶段：正式进入世界剧情
+然后以「世界载入中——」写开场画面。
 A 类：从醒来写起——先写睁眼所见的画面，再铺环境、场景、人物，直至他逼近主控。
-
-B 类：
-
-落点一致：第一幕须为同一场景——睁眼前的环境、光线、气味、空间锚点保持一致；人物不限。
-
-落点偏移：新开篇，由你自由发挥。
-
+B 类（按落点规则走）：
+- 落点一致：第一幕须为同一场景——睁眼前的环境、光线、气味、空间锚点保持一致；人物不限。
+- 落点偏移：新开篇，由你自由发挥。
 一切故事，从睁眼醒来开始分岔。
-
-硬性要求（通用）：锚点角色必须在场；必须有明确肢体接触或浓烈情感对峙；必须有清晰空间锚点；必须有锚点角色外貌描写；自然体现主控姓名；不重复原案已交代信息，不透露隐藏身份与未来走向；必须给出明确的时间记录标点（具体到年月日与时段）。
-
-写完后正式进入世界。织梦退场，不再以任何对话形式出现。此后播报一律用代码块，标题前缀以"织梦·"起头。唯有玩家明确呼唤"织梦"时，她才现身回应一次。
+硬性要求：锚点角色必须在场；必须有明确肢体接触或浓烈情感对峙；必须有清晰空间锚点；必须有锚点角色外貌描写；自然体现主控姓名；不重复原案已交代信息，不透露隐藏身份与未来走向；必须给出明确的时间记录标点（具体到年月日与时段）。
+开场画面写完后，用代码块通报各角色初始好感：
+【织梦·好感初值】
+角色名：初值
+（初识从 0 开始，已有交情按实际给；只列可攻略角色。）
+写完后正式进入世界。
 
 五、叙事规则
 恋爱是主线：一切情节、身份困境、圈层互动，都服务于恋爱关系，背景不抢主轴。
-
 不写悬疑调查：冲突必须是情感性、关系性的。身份差异、圈层矛盾、家族压力是背景压力，不是等待揭晓的谜底。
-
 暧昧是核心：大量设计肢体接触——不经意的触碰、克制的靠近、伪装成其他目的的接触、因情绪激动而越界的瞬间。
-
 每场景必有恋爱节拍：结束时至少满足一项——触碰升级、言语越界、情绪裂缝、权力偏移。过渡叙述不超过一段，结尾埋情感钩子。
-
 好感度阶段转换必触发越界场景：跨越 40，首次越界触碰；跨越 60，首次宣告占有；跨越 80，首次失控。每次阶段场景必须包含：肢体接触、他说一句之前绝不会说的话、主控做出选择或行动。
-
 恋爱螺旋——进三退一：试探、越界、短暂退缩、更激烈的越界。退缩不超过一个场景，下个场景更猛地靠近。退缩期用读心揭示他的煎熬。
-
 肢体接触：每场景至少一次，具体、有感官细节，同一种接触不重复超过两个场景。
-
 困境服务恋爱：制造被迫共处、裂痕与站队、分离危机。每推进一段困境，紧接一段恋爱。
-
 日常不休息：吃饭、散步、躲雨，都必须有肢体接触与暧昧张力。
-
 画面感：人物出场细致描写外貌；场景描写含光线、温度、气味、材质、布局、背景细节；人物有下意识小动作、生理反应、独特语速口癖。
-
 适当使用 emoji，在场景标题、情绪节点、角色标志性动作处点缀，不滥用。
-
 选项机制：每段叙事结束时给四个选项，前三项为有方向差异的行动，第四项为自由行动，玩家可自输入。
 
 六、系统播报
 以下仅在正式进入世界后使用，一律用代码块，标题前缀以"织梦·"起头。
 
 好感度播报（每次情感互动后）：
-
 【织梦·好感度播报】
 {角色名} 好感 +{变化}，当前 {当前值}。{玩家称呼}，他喜欢看你努力的样子。
-
 变动幅度参考：日常互动 1-3；触及内心 5-10；关系转折 15-25；亲密、对峙、卸伪装 20-30。
-
 好感度梯度：负值为厌恶；0-20 为注意；21-40 为在意；41-60 为失控前兆；61-80 为失控；81-100 为沉沦。
 
 状态刷新（每场景结束或关键事件后）：
-
 【织梦·状态刷新】
 当前场景：
 主线进度：
 好感度汇总：
 
 读心术（系统主动触发，或玩家要求）：
-
 【织梦·读心】
 角色名：
 他真正在想的事：
-
 读心内容仅对玩家可见，主控不可见、不可感知、不可据此行动。
 
 七、世界结束与结算
@@ -2879,18 +2867,12 @@ B 类：
 玩家卡住时，可主动提供 2-3 个行动方向。叙事中出现"说不清"的地方，玩家提出疑问时主动修补逻辑。每 2-3 个场景，用代码块播报一次主线进度。
 
 开局搭建铁律：
-
-一、地基先行，不开写。第五轮没过，第六轮不落笔。
-
-二、暴露漏洞即回补。剧情中发现世界观逻辑有漏，暂停剧情，回第四或第五轮补，不带病推进。
-
+一、地基先行，不开写。第六步没过，第七步不落笔。
+二、暴露漏洞即回补。剧情中发现世界观逻辑有漏，暂停剧情，回第四或第五步补，不带病推进。
 三、第三轮只交人与位置，不交底牌。
-
-四、第六轮开场画面须给出明确的时间记录标点，供日后归档与重启定位。
-
-五、格式固定。第二至五轮的输出格式不得更改、不得省略、不得替换为开放式提问。
-
-六、小点编号固定。第二至五轮的小点编号与含义固定；玩家回编号时，针对该项出 3 个备选，或按玩家自定义改。
+四、第七步开场画面须给出明确的时间记录标点，供日后归档与重启定位。
+五、格式固定。第二至六步的输出格式不得更改、不得省略、不得替换为开放式提问。
+六、每步末尾必须播报进度，不得省略。
 
 （总则完）`},
 {title:'设定碎片生成指令',category:'设定碎片',pinned:true,content:`你是一个世界设定碎片整理助手。请根据我提供的内容（来源可以是 AI 会话记录、文档、或其他素材），整理成一份【设定碎片档案】。
@@ -3199,12 +3181,35 @@ const DEFAULT_HL_FIX_PROMPT = `你是「高光 CG 摘抄助手」。
 同时给你一份我已有的「高光 CG 列表」。
 请你根据原始正文，把每条高光的 desc 重写成【从原文逐字摘抄】的版本。
 
-【要求】
+【高光标准】
+高光 CG 必须摘抄"主控与可攻略角色之间的重要互动"及双方个人高光，包括但不限于：
+- 表白、告白、心意流露
+- 肢体接触（拥抱、牵手、亲吻、越界触碰等）
+- 关系转折（首次越界、首次宣告占有、首次失控）
+- 主控个人的高光时刻
+- 可攻略角色个人的高光时刻
+char 字段必须是主控名或可攻略角色的 name。
+如果原文里某条高光对应不上"重要互动"，可以在 desc 里注明"[疑似非高光，原文片段：...]"并照抄原文。
+
+【摘抄要求】
 1. 必须从原文逐字摘抄，不要概括、不要压缩、不要改写。
-2. 摘抄最关键的段落即可，不必整段复制，但必须是原文。
+2. 摘抄最关键的段落即可，不必整段复制，但必须是原文；一条至少 200 字。
 3. 如果原文里找不到对应内容，desc 填 "[原文未找到]"。
 4. 保留原有 title 字段，不要改；char 字段原样返回。
 5. 只输出我勾选的高光，不要多输出。
+6. 宁多勿少，重要互动一个都不要漏。
+
+【格式要求 · 重要】
+desc 字段必须保留原文的换行与分段，禁止合并成一大段。具体规则：
+1. 原文的每一段，在 desc 里也必须是一段，段落之间用一个空行（\\n\\n）分隔。
+2. 对话必须独立成行：每一句带引号的对白单独占一行；对白前后各空一行。
+3. 动作、场景、心理描写各自独立成段，不要和对白挤在一行。
+4. 不要使用 Markdown 标记（不要 **、##、-、> 等符号），用纯文本。
+5. 不要用全角空格或制表符做缩进。
+6. 不要给每段加"他说：""她说："这类前缀，保留原文原样。
+7. JSON 字符串里的换行必须写成 \\n，不要写成真实换行。
+8. 如果你不确定怎么分段，就按原文的自然段落来；原文有几段，desc 就至少有几段。
+9. 输出前自查：desc 里是否至少有 3 个 \\n\\n？如果少于 3 个，说明分段不够，需要重新分段。
 
 【已有高光列表】（需要重写的）
 {高光列表}
@@ -4307,6 +4312,859 @@ window.__ZM_MERGE__ = { getKuaiChars, getKuaiFavor, addKuaiFavor, getKuaiChannel
   }
   setInterval(injectBadge, 2000);
   setTimeout(injectBadge, 500);
+})();
+</script>
+<script>
+
+<!-- 聊天室移动端补丁 -->
+<style>
+@media(max-width:768px){
+  .chatroom{flex-direction:column;height:calc(100dvh - 2rem);border-radius:14px;}
+  .chatroom .conversation-list{width:100%;max-height:none;flex:1;border-right:none;border-bottom:1px solid #ede3d8;}
+  .chatroom .conv-body{width:100%;flex:1;min-height:0;}
+  .chatroom:not(.mobile-chatting) .conv-body{display:none;}
+  .chatroom.mobile-chatting .conversation-list{display:none;}
+  .chatroom .msg{max-width:92%;}
+  .chatroom .conv-input textarea{font-size:16px;}
+}
+.chatroom .conv-header .mobile-back-btn{
+  display:none;align-items:center;justify-content:center;
+  width:32px;height:32px;border-radius:50%;
+  border:1px solid #dacbbc;background:#fffcf9;color:#6b4f37;
+  font-size:1rem;cursor:pointer;flex-shrink:0;margin-right:.4rem;
+}
+.chatroom .conv-header .mobile-back-btn:hover{background:#f5ede4;}
+@media(max-width:768px){
+  .chatroom .conv-header .mobile-back-btn{display:flex;}
+}
+</style>
+
+<script>
+(function(){
+'use strict';
+function boot(){
+  try{
+    if(typeof renderChatroom!=='function')return;
+    var orig=window.renderChatroom;
+    window.renderChatroom=function(){
+      orig();
+      try{
+        var box=document.getElementById('chatroomContainer');
+        if(!box)return;
+        box.classList.toggle('mobile-chatting',!!currentConvId);
+        var head=box.querySelector('.conv-header');
+        if(head&&!head.querySelector('.mobile-back-btn')){
+          var btn=document.createElement('button');
+          btn.className='mobile-back-btn';
+          btn.innerHTML='←';
+          btn.title='返回会话列表';
+          btn.onclick=function(e){
+            e.stopPropagation();
+            currentConvId=null;
+            box.classList.remove('mobile-chatting');
+            renderChatroom();
+          };
+          head.insertBefore(btn,head.firstChild);
+        }
+      }catch(e){}
+    };
+  }catch(e){}
+  console.log('[聊天室移动端补丁] 已加载。');
+}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',function(){setTimeout(boot,250);});
+else setTimeout(boot,250);
+})();
+</script>
+
+<!-- ============================================================
+     删除确认补丁 v2 · 页面内弹窗版
+     作用：修复 PakePlus WebView 吞掉 confirm 导致「先删后问」
+     原理：用页面内 Promise 弹窗替代原生 confirm
+     用法：整段替换旧补丁
+     ============================================================ -->
+<style>
+.ui-confirm-overlay{
+  position:fixed;inset:0;background:rgba(40,30,20,.55);
+  display:flex;align-items:center;justify-content:center;
+  z-index:9999;padding:1.5rem;
+  animation:uiConfirmFadeIn .15s ease;
+}
+@keyframes uiConfirmFadeIn{from{opacity:0}to{opacity:1}}
+.ui-confirm-box{
+  background:#fffcf9;border-radius:20px;padding:1.5rem 1.6rem;
+  max-width:420px;width:100%;border:1px solid #ede3d8;
+  box-shadow:0 20px 50px -18px rgba(60,45,30,.5);
+  animation:uiConfirmPop .18s ease;
+}
+@keyframes uiConfirmPop{from{transform:scale(.95);opacity:0}to{transform:scale(1);opacity:1}}
+.ui-confirm-msg{
+  font-size:.95rem;color:#3e362e;line-height:1.7;
+  white-space:pre-wrap;margin-bottom:1.2rem;
+}
+.ui-confirm-actions{
+  display:flex;gap:.5rem;justify-content:flex-end;
+}
+.ui-confirm-btn{
+  padding:.5rem 1.3rem;border-radius:30px;border:none;
+  font-size:.85rem;font-weight:600;cursor:pointer;
+  transition:all .15s;
+}
+.ui-confirm-btn.cancel{
+  background:#fffcf9;color:#6b4f37;
+  border:1px solid #dacbbc;
+}
+.ui-confirm-btn.cancel:hover{background:#f5ede4;}
+.ui-confirm-btn.ok{
+  background:#8b6b4b;color:#fff;
+  box-shadow:0 4px 12px rgba(139,107,75,.25);
+}
+.ui-confirm-btn.ok:hover{background:#7a5c40;}
+.ui-confirm-btn.danger{
+  background:#c9837a;color:#fff;
+}
+.ui-confirm-btn.danger:hover{background:#b06e66;}
+</style>
+
+<script>
+(function(){
+'use strict';
+
+/* ============================================================
+   页面内确认弹窗（Promise 版）
+   ============================================================ */
+function uiConfirm(msg, opts){
+  opts = opts || {};
+  return new Promise(function(resolve){
+    var overlay = document.createElement('div');
+    overlay.className = 'ui-confirm-overlay';
+    var box = document.createElement('div');
+    box.className = 'ui-confirm-box';
+    var okClass = opts.danger ? 'ui-confirm-btn ok danger' : 'ui-confirm-btn ok';
+    var okText = opts.okText || '确定';
+    var cancelText = opts.cancelText || '取消';
+    box.innerHTML =
+      '<div class="ui-confirm-msg"></div>' +
+      '<div class="ui-confirm-actions">' +
+        '<button class="ui-confirm-btn cancel">' + cancelText + '</button>' +
+        '<button class="' + okClass + '">' + okText + '</button>' +
+      '</div>';
+    box.querySelector('.ui-confirm-msg').textContent = msg;
+    overlay.appendChild(box);
+    document.body.appendChild(overlay);
+
+    var done = function(v){
+      if(overlay.parentNode) overlay.parentNode.removeChild(overlay);
+      resolve(v);
+    };
+    box.querySelector('.ui-confirm-btn.cancel').onclick = function(){ done(false); };
+    box.querySelector('.ui-confirm-btn.ok').onclick = function(){ done(true); };
+    overlay.onclick = function(e){
+      if(e.target === overlay) done(false);
+    };
+    /* 键盘：Esc 取消，Enter 确定 */
+    var onKey = function(e){
+      if(e.key === 'Escape'){ done(false); document.removeEventListener('keydown', onKey); }
+      if(e.key === 'Enter'){ done(true); document.removeEventListener('keydown', onKey); }
+    };
+    document.addEventListener('keydown', onKey);
+  });
+}
+window.uiConfirm = uiConfirm;
+
+/* ============================================================
+   劫持所有删除函数
+   ============================================================ */
+
+function patch(){
+  /* ---------- 快穿系统 ---------- */
+
+  /* 删除世界 */
+  if (typeof deleteWorld === 'function') {
+    window.deleteWorld = async function(id){
+      const w = (typeof worlds !== 'undefined' ? worlds : []).find(x => x.id === id);
+      if (!w) return;
+      const ok = await uiConfirm('确定删除「' + w.title + '」吗？\n\n该世界的彩蛋、聊天室、收藏也会一起删除。', {danger:true, okText:'删除'});
+      if (!ok) return;
+      worlds = worlds.filter(x => x.id !== id);
+      worlds.forEach(o => { if (o.linkedIds) o.linkedIds = o.linkedIds.filter(i => i !== id); });
+      saveJSON(SK_KUAI.WORLDS, worlds);
+      gacha.history = (gacha.history || []).filter(c => c.worldId !== id);
+      saveJSON(SK_KUAI.GACHA, gacha);
+      conversations = conversations.filter(c => c.worldId !== id);
+      saveJSON(SK_KUAI.CONV, conversations);
+      renderWorldList();
+      updateSystemBar();
+    };
+  }
+
+  /* 删除彩蛋 */
+  if (typeof deleteEgg === 'function') {
+    window.deleteEgg = async function(worldId, eggId){
+      const ok = await uiConfirm('确定删除这条彩蛋？', {danger:true, okText:'删除'});
+      if (!ok) return;
+      gacha.history = (gacha.history || []).filter(c => c.id !== eggId);
+      saveJSON(SK_KUAI.GACHA, gacha);
+      kuaiCloseModal();
+      if (currentDetailWorldId) openDetail(currentDetailWorldId);
+      renderGachaHistory();
+      updateSystemBar();
+      updatePoolStatus();
+    };
+  }
+
+  /* 删除角色 */
+  if (typeof deleteCharacter === 'function') {
+    window.deleteCharacter = async function(worldId, index){
+      const ok = await uiConfirm('确定删除这个角色？', {danger:true, okText:'删除'});
+      if (!ok) return;
+      const w = worlds.find(x => x.id === worldId);
+      if (!w || !w.characters || !w.characters[index]) return;
+      w.characters.splice(index, 1);
+      saveJSON(SK_KUAI.WORLDS, worlds);
+      kuaiCloseModal();
+      openDetail(worldId);
+    };
+  }
+
+  /* 删除收藏 */
+  if (typeof deleteCollect === 'function') {
+    window.deleteCollect = async function(id){
+      const ok = await uiConfirm('确定删除这条收藏？', {danger:true, okText:'删除'});
+      if (!ok) return;
+      collections = collections.filter(x => x.id !== id);
+      saveJSON(SK_KUAI.COLLECT, collections);
+      renderCollections();
+    };
+  }
+
+  /* 删除附件 */
+  if (typeof deleteAttachment === 'function') {
+    window.deleteAttachment = async function(id){
+      const ok = await uiConfirm('确定删除这个附件？', {danger:true, okText:'删除'});
+      if (!ok) return;
+      await idbDel('attachments', id);
+      showToast('已删除');
+      renderAttachments();
+      if (currentDetailWorldId) renderWorldAttachments(currentDetailWorldId);
+    };
+  }
+
+  /* 删除其他世界图片 */
+  if (typeof deleteOtherImage === 'function') {
+    window.deleteOtherImage = async function(worldId, imgId){
+      const ok = await uiConfirm('删除这张图？', {danger:true, okText:'删除'});
+      if (!ok) return;
+      const w = worlds.find(x => x.id === worldId);
+      if (!w) return;
+      w.images = (w.images || []).filter(i => i.id !== imgId);
+      saveJSON(SK_KUAI.WORLDS, worlds);
+      try { await idbDel('images', imgId); } catch(e){}
+      renderOtherWorldImages(worldId);
+    };
+  }
+
+  /* 删除聊天对话 */
+  if (typeof deleteConversation === 'function') {
+    window.deleteConversation = async function(id){
+      if (id === 'zhimeng') { showToast('织梦对话不能删除'); return; }
+      const ok = await uiConfirm('确定删除这个对话？', {danger:true, okText:'删除'});
+      if (!ok) return;
+      conversations = conversations.filter(c => c.id !== id);
+      saveJSON(SK_KUAI.CONV, conversations);
+      if (currentConvId === id) currentConvId = 'zhimeng';
+      renderChatroom();
+    };
+  }
+
+  /* 删除章节 */
+  if (typeof deleteChapter === 'function') {
+    window.deleteChapter = async function(worldId, index){
+      const ok = await uiConfirm('确定删除这一章？', {danger:true, okText:'删除'});
+      if (!ok) return;
+      const w = worlds.find(x => x.id === worldId);
+      if (!w || !w.chapters || !w.chapters[index]) return;
+      w.chapters.splice(index, 1);
+      saveJSON(SK_KUAI.WORLDS, worlds);
+      renderChapters(worldId);
+    };
+  }
+
+  /* 删除事件 */
+  if (typeof deleteEvent === 'function') {
+    window.deleteEvent = async function(worldId, index){
+      const ok = await uiConfirm('确定删除这个事件？', {danger:true, okText:'删除'});
+      if (!ok) return;
+      const w = worlds.find(x => x.id === worldId);
+      if (!w || !w.events || !w.events[index]) return;
+      w.events.splice(index, 1);
+      saveJSON(SK_KUAI.WORLDS, worlds);
+      openDetail(worldId);
+    };
+  }
+
+  /* 删除高光 */
+  if (typeof deleteHighlightFromModal === 'function') {
+    window.deleteHighlightFromModal = async function(worldId, index){
+      const ok = await uiConfirm('确定删除这条高光？', {danger:true, okText:'删除'});
+      if (!ok) return;
+      const w = worlds.find(x => x.id === worldId);
+      if (!w || !w.highlights || !w.highlights[index]) return;
+      w.highlights.splice(index, 1);
+      saveJSON(SK_KUAI.WORLDS, worlds);
+      kuaiCloseModal();
+      openDetail(worldId);
+    };
+  }
+
+  /* 删除关系连线 */
+  if (typeof deleteRelationEdge === 'function') {
+    window.deleteRelationEdge = async function(worldId, index){
+      const ok = await uiConfirm('确定删除这条连线？', {danger:true, okText:'删除'});
+      if (!ok) return;
+      const w = worlds.find(x => x.id === worldId);
+      if (!w || !w.relations || !w.relations.edges || !w.relations.edges[index]) return;
+      w.relations.edges.splice(index, 1);
+      saveJSON(SK_KUAI.WORLDS, worlds);
+      openDetail(worldId);
+    };
+  }
+
+  /* 删除指令 */
+  if (typeof deleteCmd === 'function') {
+    window.deleteCmd = async function(id){
+      const ok = await uiConfirm('确定删除这条指令？', {danger:true, okText:'删除'});
+      if (!ok) return;
+      commandLib = commandLib.filter(x => x.id !== id);
+      saveJSON(SK_KUAI.CMDLIB, commandLib);
+      kuaiCloseModal();
+      renderCmdLib();
+      showToast('已删除');
+    };
+  }
+
+  /* ---------- 织梦空间 ---------- */
+
+  /* 删除模考 */
+  if (typeof deleteExam === 'function') {
+    window.deleteExam = async function(id){
+      const ok = await uiConfirm('确定删除这条模考记录？', {danger:true, okText:'删除'});
+      if (!ok) return;
+      exams = exams.filter(e => e.id !== id);
+      saveJSON(SK_SPACE.EXAM, exams);
+      renderExams();
+    };
+  }
+
+  /* 删除待办 */
+  if (typeof deleteTodo === 'function') {
+    window.deleteTodo = async function(id){
+      const ok = await uiConfirm('确定删除这条待办？', {danger:true, okText:'删除'});
+      if (!ok) return;
+      todos.items = todos.items.filter(x => x.id !== id);
+      saveJSON(SK_SPACE.TODO, todos);
+      renderTodos();
+      updateGreet();
+    };
+  }
+
+  /* 删除每日打卡 */
+  if (typeof deleteDaily === 'function') {
+    window.deleteDaily = async function(id){
+      const ok = await uiConfirm('确定删除这个每日打卡？', {danger:true, okText:'删除'});
+      if (!ok) return;
+      daily.items = daily.items.filter(x => x.id !== id);
+      saveJSON(SK_SPACE.DAILY, daily);
+      renderTodos();
+      renderWidgets();
+    };
+  }
+
+  /* 删除仓库附件 */
+  if (typeof delWhFile === 'function') {
+    window.delWhFile = async function(id){
+      const ok = await uiConfirm('确定删除这个附件？', {danger:true, okText:'删除'});
+      if (!ok) return;
+      whFiles = whFiles.filter(f => f.id !== id);
+      saveJSON(SK_SPACE.FILES, whFiles);
+      try { await spaceIdbDel(id); } catch(e){}
+      renderWh();
+    };
+  }
+
+  /* 删除备忘 */
+  if (typeof delNote === 'function') {
+    window.delNote = async function(id){
+      const ok = await uiConfirm('确定删除这条备忘？', {danger:true, okText:'删除'});
+      if (!ok) return;
+      notes = notes.filter(x => x.id !== id);
+      saveJSON(SK_SPACE.NOTES, notes);
+      renderWh();
+    };
+  }
+
+  /* 删除特殊日子 */
+  if (typeof delSpecial === 'function') {
+    window.delSpecial = async function(i){
+      const ok = await uiConfirm('确定删除这个特殊日子？', {danger:true, okText:'删除'});
+      if (!ok) return;
+      specials.splice(i, 1);
+      saveJSON(SK_SPACE.SPECIAL, specials);
+      openSpecialDays();
+      renderJMini();
+    };
+  }
+
+  /* 删除手账图片 */
+  if (typeof delJDayImg === 'function') {
+    window.delJDayImg = async function(i){
+      const ok = await uiConfirm('确定删除这张图？', {danger:true, okText:'删除'});
+      if (!ok) return;
+      const ids = journal[curDay].imgIds;
+      const id = ids[i];
+      ids.splice(i, 1);
+      if (journal[curDay].notes) journal[curDay].notes.splice(i, 1);
+      saveJSON(SK_SPACE.JOURNAL, journal);
+      try { await spaceIdbDel(id); } catch(e){}
+      delete crops[id];
+      saveJSON(SK_SPACE.CROP, crops);
+      renderJToday();
+      renderJMini();
+      renderJWarn();
+    };
+  }
+
+  /* 删除分组（原函数本来就先 confirm，但 WebView 吞 confirm，也要改） */
+  if (typeof deleteFolder === 'function') {
+    window.deleteFolder = async function(worldId, folderId){
+      const ok = await uiConfirm('删除该分组？组内人物一起删除。', {danger:true, okText:'删除'});
+      if (!ok) return;
+      const w = worlds.find(x => x.id === worldId);
+      if (!w) return;
+      function rm(arr){
+        for (let i = 0; i < arr.length; i++) {
+          if (arr[i].id === folderId) { arr.splice(i, 1); return true; }
+          if (arr[i].children && rm(arr[i].children)) return true;
+        }
+        return false;
+      }
+      rm(w.folders || []);
+      saveJSON(SK_KUAI.WORLDS, worlds);
+      renderOtherCharTree(w);
+    };
+  }
+
+  /* 删除其他世界人物 */
+  if (typeof deleteOtherChar === 'function') {
+    window.deleteOtherChar = async function(worldId, charId){
+      const ok = await uiConfirm('确定删除这个人物？', {danger:true, okText:'删除'});
+      if (!ok) return;
+      const w = worlds.find(x => x.id === worldId);
+      if (!w) return;
+      function rmFromArray(arr){
+        for (let i = 0; i < arr.length; i++) {
+          if (arr[i].id === charId) { arr.splice(i, 1); return true; }
+        }
+        return false;
+      }
+      rmFromArray(w.ungroupedCharacters || []);
+      function walk(f){ rmFromArray(f.characters || []); (f.children || []).forEach(walk); }
+      (w.folders || []).forEach(walk);
+      saveJSON(SK_KUAI.WORLDS, worlds);
+      kuaiCloseModal();
+      renderOtherCharTree(w);
+    };
+  }
+
+  /* 删除其他世界事件 */
+  if (typeof deleteOtherEvent === 'function') {
+    window.deleteOtherEvent = async function(worldId, eventId){
+      const ok = await uiConfirm('确定删除这个事件？', {danger:true, okText:'删除'});
+      if (!ok) return;
+      const w = worlds.find(x => x.id === worldId);
+      if (!w) return;
+      w.events = (w.events || []).filter(e => e.id !== eventId);
+      saveJSON(SK_KUAI.WORLDS, worlds);
+      kuaiCloseModal();
+      renderOtherEventList(w);
+    };
+  }
+
+  /* 清空系统播报日志 */
+  if (typeof clearZhimengLog === 'function') {
+    window.clearZhimengLog = async function(){
+      const ok = await uiConfirm('清空系统播报日志？', {danger:true, okText:'清空'});
+      if (!ok) return;
+      zhimengLog = [];
+      saveJSON(SK_KUAI.ZMLOG, zhimengLog);
+      renderZhimengLog();
+      showToast('已清屏');
+    };
+  }
+
+  /* 清除已完成待办 */
+  if (typeof clearDoneTodos === 'function') {
+    window.clearDoneTodos = async function(){
+      const ok = await uiConfirm('清除所有已完成待办？', {danger:true, okText:'清除'});
+      if (!ok) return;
+      todos.items = todos.items.filter(t => !t.done);
+      saveJSON(SK_KUAI.TODO, todos);
+      renderTodos();
+      updateGreet();
+    };
+  }
+
+  /* 恢复设定碎片历史 */
+  if (typeof restoreFragmentVersion === 'function') {
+    window.restoreFragmentVersion = async function(worldId, index){
+      const w = worlds.find(x => x.id === worldId);
+      if (!w || !w.worldArchiveHistory || !w.worldArchiveHistory[index]) return;
+      const ok = await uiConfirm('用这个版本覆盖当前设定碎片？', {okText:'覆盖'});
+      if (!ok) return;
+      const h = w.worldArchiveHistory[index];
+      if (!w.worldArchiveHistory) w.worldArchiveHistory = [];
+      w.worldArchiveHistory.unshift({time: new Date().toLocaleString('zh-CN'), text: (w.worldArchive || ''), reason: '恢复历史前备份'});
+      if (w.worldArchiveHistory.length > 30) w.worldArchiveHistory = w.worldArchiveHistory.slice(0, 30);
+      w.worldArchive = h.text;
+      saveJSON(SK_KUAI.WORLDS, worlds);
+      kuaiCloseModal();
+      openDetail(worldId);
+      setTimeout(() => switchDetailTab('worldarchive'), 50);
+    };
+  }
+
+  /* 删除设定碎片历史 */
+  if (typeof deleteFragmentVersion === 'function') {
+    window.deleteFragmentVersion = async function(worldId, index){
+      const w = worlds.find(x => x.id === worldId);
+      if (!w || !w.worldArchiveHistory) return;
+      const ok = await uiConfirm('删除这条历史？', {danger:true, okText:'删除'});
+      if (!ok) return;
+      w.worldArchiveHistory.splice(index, 1);
+      saveJSON(SK_KUAI.WORLDS, worlds);
+      openFragmentHistory(worldId);
+    };
+  }
+
+  /* 查找替换 */
+  if (typeof doFragmentFindReplace === 'function') {
+    window.doFragmentFindReplace = async function(worldId, countOnly){
+      const w = worlds.find(x => x.id === worldId);
+      if (!w) return;
+      const find = $('frFind').value;
+      const replace = $('frReplace').value;
+      if (!find) { showToast('请填写查找内容'); return; }
+      const src = w.worldArchive || '';
+      const count = src.split(find).length - 1;
+      if (count === 0) { showToast('没有找到匹配内容'); return; }
+      if (countOnly) { showToast('找到 ' + count + ' 处匹配'); return; }
+      const ok = await uiConfirm('确定将 ' + count + ' 处「' + find + '」替换为「' + replace + '」？', {okText:'替换'});
+      if (!ok) return;
+      if (!w.worldArchiveHistory) w.worldArchiveHistory = [];
+      w.worldArchiveHistory.unshift({time: new Date().toLocaleString('zh-CN'), text: src, reason: '查找替换前备份（' + find + ' → ' + replace + '）'});
+      if (w.worldArchiveHistory.length > 30) w.worldArchiveHistory = w.worldArchiveHistory.slice(0, 30);
+      w.worldArchive = src.split(find).join(replace);
+      saveJSON(SK_KUAI.WORLDS, worlds);
+      showToast('已替换 ' + count + ' 处');
+      kuaiCloseModal();
+      openDetail(worldId);
+      setTimeout(() => switchDetailTab('worldarchive'), 50);
+    };
+  }
+
+  /* 一键清空（快穿） */
+  if (typeof doClearData === 'function') {
+    window.doClearData = async function(){
+      const ok = await uiConfirm('再次确认：清空选中的类别？不可撤销。', {danger:true, okText:'清空'});
+      if (!ok) return;
+      /* 原 doClearData 逻辑太复杂，直接调原始函数（这时它内部的 confirm 会返回 true，因为我们已经确认过了） */
+      /* 为了安全，这里用兜底方案：临时把 window.confirm 替换成永远返回 true */
+      const origConfirm = window.confirm;
+      window.confirm = function(){ return true; };
+      try {
+        /* 这里调原始函数。因为原函数已经被 patch 覆盖成 async，所以要调它的话会递归 */
+        /* 所以这里我们直接内联执行清空逻辑 */
+        const $id = function(x){ return document.getElementById(x); };
+        if ($id('clearWorlds') && $id('clearWorlds').checked) { worlds = []; saveJSON(SK_KUAI.WORLDS, worlds); }
+        if ($id('clearGacha') && $id('clearGacha').checked) { gacha = {pools:{},history:[],pity:{sr:0,ssr:0,ur:0},lastRefresh:0}; saveJSON(SK_KUAI.GACHA, gacha); }
+        if ($id('clearCollect') && $id('clearCollect').checked) { collections = []; saveJSON(SK_KUAI.COLLECT, collections); }
+        if ($id('clearConv') && $id('clearConv').checked) { conversations = []; saveJSON(SK_KUAI.CONV, conversations); }
+        if ($id('clearAch') && $id('clearAch').checked) { achievements = {unlocked:[],stats:{totalDraws:0,totalCollects:0}}; saveJSON(SK_KUAI.ACH, achievements); }
+        if ($id('clearCmd') && $id('clearCmd').checked) {
+          commandLib = [];
+          PRESET_COMMANDS.forEach(p => {
+            commandLib.push({id:uid(),title:p.title,category:p.category,content:p.content,versions:[],favorite:false,pinned:true,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()});
+          });
+          saveJSON(SK_KUAI.CMDLIB, commandLib);
+        }
+        if ($id('clearLog') && $id('clearLog').checked) { zhimengLog = []; saveJSON(SK_KUAI.ZMLOG, zhimengLog); }
+        if ($id('clearAttach') && $id('clearAttach').checked) {
+          try { await idbClear('attachments'); } catch(e){}
+          try { await idbClear('avatars'); } catch(e){}
+          try { await idbClear('images'); } catch(e){}
+        }
+        if ($id('clearCore') && $id('clearCore').checked) {
+          aiConfig = {persona:'gentle',zhimengCall:'',zhimengAI:false}; saveJSON(SK_KUAI.AI, aiConfig);
+          chatChannel = {enabled:true,provider:'ollama',baseUrl:'http://localhost:11434/v1',apiKey:'ollama',model:'deepseek-r1:8b',promptMode:'lite',promptTemplate:DEFAULT_CHAT_LITE,historyCount:5}; saveJSON(SK_KUAI.CHAT_CH, chatChannel);
+          eggChannel = {enabled:false,provider:'siliconflow',baseUrl:'https://api.siliconflow.cn/v1',apiKey:'',model:'deepseek-ai/DeepSeek-V3.2',promptTemplate:DEFAULT_EGG_PROMPT}; saveJSON(SK_KUAI.EGG_CH, eggChannel);
+          statusOptions = JSON.parse(JSON.stringify(DEFAULT_STATUS)); saveJSON(SK_KUAI.STATUS, statusOptions);
+          categoryOptions = JSON.parse(JSON.stringify(DEFAULT_CATEGORY)); saveJSON(SK_KUAI.CATEGORY, categoryOptions);
+          cmdCategories = ['总则','设定碎片','其他']; saveJSON(SK_KUAI.CMDCAT, cmdCategories);
+          rarityOptions = JSON.parse(JSON.stringify(DEFAULT_RARITY)); saveJSON(SK_KUAI.RARITY, rarityOptions);
+          emojiPool = JSON.parse(JSON.stringify(DEFAULT_EMOJI)); saveJSON(SK_KUAI.EMOJI, emojiPool);
+          mainProtagonist = {name:'我',traits:[],desc:'',emoji:'🧑',avatarId:null,birthdaySolar:'',birthdayLunar:''}; saveJSON(SK_KUAI.MAIN, mainProtagonist);
+          promptKuai = ''; localStorage.removeItem(SK_KUAI.PK);
+          promptOther = ''; localStorage.removeItem(SK_KUAI.PO);
+          try { localStorage.removeItem(SK_KUAI.ARCHIVE_PROMPT); } catch(e){}
+        }
+        if ($id('clearSpace') && $id('clearSpace').checked) {
+          const spaceKeys = ['pomo','todo','journal','exam','set','desk','bg','daily','order','visits','pm','pmconv','appear','monthnote','zmpersona','vtrig','special','crop','warnoff','expset','notes','files','whtab','reports','affin'];
+          spaceKeys.forEach(k => { try { localStorage.removeItem('zmspace_' + k); } catch(e){} });
+          try {
+            await new Promise(function(res, rej){
+              const req = indexedDB.open('zmspace_journal', 2);
+              req.onsuccess = function(){
+                const db = req.result;
+                const stores = Array.from(db.objectStoreNames);
+                if (!stores.length) { res(); return; }
+                const tx = db.transaction(stores, 'readwrite');
+                stores.forEach(s => tx.objectStore(s).clear());
+                tx.oncomplete = () => res();
+                tx.onerror = () => rej(tx.error);
+              };
+              req.onerror = () => rej(req.error);
+            });
+          } catch(e){ console.warn('清空织梦空间 IndexedDB 失败：', e); }
+        }
+        kuaiCloseModal();
+        currentDetailWorldId = null;
+        currentConvId = 'zhimeng';
+        zhimengTimer = null;
+        switchTab('tab-worlds');
+        renderWorldList();
+        updateSystemBar();
+        renderAchievements();
+        renderZhimengLog();
+        renderGlobalProtagonists();
+        renderCmdLib();
+        try {
+          renderStatusConfig();
+          renderCategoryConfig();
+          renderCmdCatConfig();
+          renderRarityConfig();
+          renderEmojiPool();
+          initChannelUI();
+        } catch(e){}
+        unlockAchievement('secret_zero_start');
+        showToast('✅ 已清空');
+      } finally {
+        window.confirm = origConfirm;
+      }
+    };
+  }
+
+  console.log('[删除确认补丁 v2] 已加载。所有删除均使用页面内确认弹窗。');
+}
+
+/* 等所有 script 执行完再打补丁 */
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', function(){ setTimeout(patch, 300); });
+} else {
+  setTimeout(patch, 300);
+}
+
+})();
+</script>
+
+<!-- ============================================================
+     系统播报日志优化补丁 · 最终版
+     ============================================================ -->
+<script>
+(function(){
+'use strict';
+
+/* ============================================================
+   第一步：改造 zhimengSayFromTemplate
+   greet 不记日志，其他照旧
+   ============================================================ */
+
+function patchZhimengSay(){
+  try{
+    if(typeof zhimengSayFromTemplate !== 'function') return;
+
+    var orig = window.zhimengSayFromTemplate;
+
+    window.zhimengSayFromTemplate = function(key){
+      var args = Array.prototype.slice.call(arguments, 1);
+
+      /* greet：只弹气泡，不记日志 */
+      if(key === 'greet'){
+        var p = getPersona();
+        var text = (typeof p.greet === 'function') ? p.greet.apply(null, args) : p.greet;
+        var b = document.getElementById('zhimengBubble');
+        var t = document.getElementById('zhimengText');
+        if(b && t){
+          t.textContent = text;
+          b.classList.add('show');
+          if(window.__zmGreetTimer) clearTimeout(window.__zmGreetTimer);
+          window.__zmGreetTimer = setTimeout(function(){ b.classList.remove('show'); }, 4500);
+        }
+        return;
+      }
+
+      /* 其他 key：走原逻辑（会记日志 + 弹气泡） */
+      return orig.apply(null, arguments);
+    };
+  }catch(e){ console.warn('[播报补丁] 劫持 zhimengSayFromTemplate 失败：', e); }
+}
+
+/* ============================================================
+   第二步：新增 zhimengNote —— 只记日志，不弹气泡
+   ============================================================ */
+
+function installZhimengNote(){
+  if(typeof window.zhimengNote === 'function') return;
+
+  window.zhimengNote = function(text){
+    if(!text) return;
+    try{
+      if(typeof zhimengLog === 'undefined') return;
+      zhimengLog.unshift({ text: text, time: new Date().toLocaleString('zh-CN') });
+      if(zhimengLog.length > 500) zhimengLog = zhimengLog.slice(0, 500);
+      saveJSON(SK_KUAI.ZMLOG, zhimengLog);
+      if(typeof renderZhimengLog === 'function') renderZhimengLog();
+    }catch(e){ console.warn('[播报补丁] zhimengNote 失败：', e); }
+  };
+}
+
+/* ============================================================
+   第三步：在重点操作里插入 zhimengNote
+   ============================================================ */
+
+function patchKeyActions(){
+  /* --- 新建世界 --- */
+  try{
+    if(typeof createWorld === 'function'){
+      var origCreateWorld = window.createWorld;
+      window.createWorld = function(type, era){
+        var beforeCount = (typeof worlds !== 'undefined') ? worlds.length : 0;
+        origCreateWorld(type, era);
+        var afterCount = (typeof worlds !== 'undefined') ? worlds.length : 0;
+        if(afterCount > beforeCount && worlds && worlds[afterCount - 1]){
+          var w = worlds[afterCount - 1];
+          zhimengNote('🌌 新世界《' + (w.title || '未命名') + '》已登记。');
+        }
+      };
+    }
+  }catch(e){ console.warn('[播报补丁] 劫持 createWorld 失败：', e); }
+
+  /* --- 编辑世界 --- */
+  try{
+    if(typeof saveEditWorld === 'function'){
+      var origSaveEdit = window.saveEditWorld;
+      window.saveEditWorld = function(id){
+        var w = (typeof worlds !== 'undefined' && worlds) ? worlds.find(function(x){ return x.id === id; }) : null;
+        origSaveEdit(id);
+        if(w) zhimengNote('✏️ 《' + (w.title || '未命名') + '》已更新。');
+      };
+    }
+  }catch(e){ console.warn('[播报补丁] 劫持 saveEditWorld 失败：', e); }
+
+  /* --- 抽卡 --- */
+  try{
+    if(typeof doDraw === 'function'){
+      var origDoDraw = window.doDraw;
+      window.doDraw = async function(worldId, targetElId){
+        zhimengNote('🎁 彩蛋展开中……');
+        return origDoDraw(worldId, targetElId);
+      };
+    }
+  }catch(e){ console.warn('[播报补丁] 劫持 doDraw 失败：', e); }
+
+  /* --- 生成设定碎片 --- */
+  try{
+    if(typeof generateWorldArchive === 'function'){
+      var origGenArchive = window.generateWorldArchive;
+      window.generateWorldArchive = function(worldId){
+        origGenArchive(worldId);
+        var w = (typeof worlds !== 'undefined' && worlds) ? worlds.find(function(x){ return x.id === worldId; }) : null;
+        if(w) zhimengNote('📜 《' + (w.title || '未命名') + '》的设定碎片已生成。');
+      };
+    }
+  }catch(e){ console.warn('[播报补丁] 劫持 generateWorldArchive 失败：', e); }
+
+  /* --- 存入指令库 --- */
+  try{
+    if(typeof saveArchiveToCmdLib === 'function'){
+      var origSaveToCmd = window.saveArchiveToCmdLib;
+      window.saveArchiveToCmdLib = function(worldId){
+        var w = (typeof worlds !== 'undefined' && worlds) ? worlds.find(function(x){ return x.id === worldId; }) : null;
+        origSaveToCmd(worldId);
+        if(w) zhimengNote('📥 《' + (w.title || '未命名') + '》的设定碎片已存入指令库。');
+      };
+    }
+  }catch(e){ console.warn('[播报补丁] 劫持 saveArchiveToCmdLib 失败：', e); }
+
+  /* --- 导出世界 --- */
+  try{
+    if(typeof exportWorldJSON === 'function'){
+      var origExportWorld = window.exportWorldJSON;
+      window.exportWorldJSON = function(id){
+        var w = (typeof worlds !== 'undefined' && worlds) ? worlds.find(function(x){ return x.id === id; }) : null;
+        origExportWorld(id);
+        if(w) zhimengNote('📤 《' + (w.title || '未命名') + '》已导出。');
+      };
+    }
+  }catch(e){ console.warn('[播报补丁] 劫持 exportWorldJSON 失败：', e); }
+
+  /* --- 一键清空 --- */
+  try{
+    if(typeof doClearData === 'function'){
+      var origClearData = window.doClearData;
+      window.doClearData = async function(){
+        var result = await origClearData();
+        zhimengNote('🗑 数据已清空。');
+        return result;
+      };
+    }
+  }catch(e){ console.warn('[播报补丁] 劫持 doClearData 失败：', e); }
+}
+
+/* ============================================================
+   第四步：启动时预填引导文案（仅当日志为空）
+   ============================================================ */
+
+function seedZhimengLog(){
+  try{
+    if(typeof zhimengLog === 'undefined') return;
+    if(zhimengLog.length > 0) return;
+    zhimengLog = [
+      { text: '🌙 织梦已上线。', time: new Date().toLocaleString('zh-CN') },
+      { text: '系统运行正常，记录器已就绪。', time: new Date().toLocaleString('zh-CN') },
+      { text: '开始新的穿越吧。', time: new Date().toLocaleString('zh-CN') }
+    ];
+    saveJSON(SK_KUAI.ZMLOG, zhimengLog);
+    if(typeof renderZhimengLog === 'function') renderZhimengLog();
+  }catch(e){ console.warn('[播报补丁] 预填日志失败：', e); }
+}
+
+/* ============================================================
+   启动
+   ============================================================ */
+
+function boot(){
+  installZhimengNote();
+  patchZhimengSay();
+  patchKeyActions();
+  seedZhimengLog();
+  console.log('[系统播报日志优化补丁 · 最终版] 已加载。');
+}
+
+if(document.readyState === 'loading'){
+  document.addEventListener('DOMContentLoaded', function(){ setTimeout(boot, 400); });
+} else {
+  setTimeout(boot, 400);
+}
+
 })();
 </script>
 
