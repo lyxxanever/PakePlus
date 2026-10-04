@@ -1347,7 +1347,27 @@ const DEFAULT_PROMPT_KUAI=`你是一个文游记录整理助手。请把玩家�
    如果原文里某条高光对应不上"重要互动"，可以在 desc 里注明"[疑似非高光，原文片段：...]"并照抄原文。
 10. events 至少 10 个。
 11. relations.nodes 和 edges 按结构填。
-12. 只输出纯 JSON，不要任何解释、注释、代码块包裹。`;
+12. chapters 是整个世界的故事正文，要把原文内容概括、串联、重组成一篇连贯的短篇故事。要求：
+   - 不是摘抄，是概括。原文里零散的对话、场景、事件，要提炼成连贯的叙述。
+   - 不是流水账，是故事。要有起承转合，有时间推进，有情节发展。
+   - 按时间顺序，从开篇写到结算，覆盖主线。
+   - 至少 1 章，通常 3-8 章；每章有标题（如"第一章 · 初入谢府"）。
+   - 每章 content 是完整叙述，像短篇小说的一节，有场景、有人物、有对话、有心理。
+   - 如果原文本身有章节结构，可以参考原文分章；如果原文是散段，按情节节点重组分章。
+   - 不要和高光/事件重复。chapters 是"读起来像小说"，高光是"摘抄原文片段"，事件是"关键节点列表"。
+   - 可以合理串联原文里没有明写的过渡，但不要编造原文没有的关键情节。
+   - 目标是让读者读完 chapters，就能了解整个故事发生了什么。
+13.subtitle 是世界的副标题，一句话，风格随世界氛围走，不超过 30 字。它不一定是概述，可以是：
+   - 一句话概述（如"一场以退为进的夺嫡博弈"）
+   - 一句名台词（如"我从未想过要活着离开"）
+   - 一个网感小说名（如"穿成炮灰后我靠摆烂封神"）
+   - 一个营销号标题（如"震惊！三皇子居然对她做了这种事"）
+   - 一句氛围短句（如"长安雪落，故人不归"）
+   要求：
+   - 风格必须匹配世界的类型与基调（古代偏文雅，现代偏口语，搞笑偏网感）。
+   - 禁止直接搬运 tags；禁止只写分类词（如"古代言情""快穿""乙女"）。
+   - 如果没有合适的，填空字符串。
+14. 只输出纯 JSON，不要任何解释、注释、代码块包裹。`;
 const DEFAULT_PROMPT_OTHER=`你是一个记录整理助手。请把玩家提供的内容，整理成严格符合以下 JSON 结构的【其他世界 JSON】，只输出纯 JSON，不要任何多余文字，不要代码块包裹。\n\n{"type":"otherworld","title":"","subtitle":"","source":"","tags":[],"desc":"","folders":[{"name":"","children":[],"characters":[{"name":"","role":"","tags":[],"impression":"","spouse":"","parents":[]}]}],"ungroupedCharacters":[],"events":[{"title":"","date":"","desc":""}],"chapters":[{"title":"","content":""}],"relations":{"nodes":[],"edges":[]},"images":[],"linkedIds":[]}\n\n规则：\n1. 所有字段必须出现。\n2. folders 可嵌套。\n3. spouse 和 parents 用于族谱。\n4. 只输出纯 JSON。`;
 let chatChannel=loadJSON(SK_KUAI.CHAT_CH,{enabled:true,provider:'ollama',baseUrl:'http://localhost:11434/v1',apiKey:'ollama',model:'deepseek-r1:8b',promptMode:'lite',promptTemplate:DEFAULT_CHAT_LITE,historyCount:5});
 let eggChannel=loadJSON(SK_KUAI.EGG_CH,{enabled:false,provider:'siliconflow',baseUrl:'https://api.siliconflow.cn/v1',apiKey:'',model:'deepseek-ai/DeepSeek-V3.2',promptTemplate:DEFAULT_EGG_PROMPT});
@@ -2347,7 +2367,7 @@ function renderGlobalProtagonists(){
       const name=p.name||'未命名身份';
      const role=p.occupation||'';
      const desc=p.desc||'';
-     const summary=desc||p.experience||'';
+     const summary=p.experience||desc||'';
       const anchor=w.anchor||'';
       const traits=(p.traits||[]).filter(Boolean).slice(0,3);
       const fromText=w.title||'';
@@ -2383,14 +2403,14 @@ html+='</div>';
         </div>
 <div class="mask-detail">
   <div style="margin-top:.6rem;">
-    ${p.desc?`<div class="protagonist-desc">${esc(p.desc)}</div>`:''}
-    <ul class="trait-list">${(p.traits||[]).map(t=>`<li>${esc(t)}</li>`).join('')}</ul>
+    ${p.experience?`<div class="char-label">📖 经历</div><div class="protagonist-desc" style="background:#fffcf9;padding:.7rem 1rem;border-radius:10px;border:1px solid #e6d9cd;">${esc(p.experience)}</div>`:''}
+    ${p.desc?`<div class="char-label" style="margin-top:.6rem;">📝 描述</div><div class="protagonist-desc" style="background:#fffcf9;padding:.7rem 1rem;border-radius:10px;border:1px solid #e6d9cd;">${esc(p.desc)}</div>`:''}
     ${p.opening?`<div class="char-label" style="margin-top:.6rem;">🌅 开篇画面</div><div class="protagonist-desc" style="background:#fffcf9;padding:.7rem 1rem;border-radius:10px;border:1px solid #e6d9cd;">${esc(p.opening)}</div>`:''}
     <div class="char-label" style="margin-top:.6rem;">🎬 结算画面</div>
     <div class="protagonist-desc" style="background:#fffcf9;padding:.7rem 1rem;border-radius:10px;border:1px solid #e6d9cd;">${esc(p.ending||'此世界未完待续')}</div>
+    ${(p.traits&&p.traits.length)?`<div class="char-label" style="margin-top:.6rem;">🏷️ 特质</div><ul class="trait-list" style="margin-top:.3rem;">${p.traits.map(t=>`<li>${esc(t)}</li>`).join('')}</ul>`:''}
   </div>
-</div>
-</div>`;
+</div></div>`;
     });
     html+='</div>';
     el.innerHTML=html;
@@ -5163,6 +5183,1049 @@ if(document.readyState === 'loading'){
   document.addEventListener('DOMContentLoaded', function(){ setTimeout(boot, 400); });
 } else {
   setTimeout(boot, 400);
+}
+
+})();
+</script>
+
+<!-- ============================================================
+     综合优化补丁 v1
+     作用：
+     1. 所有 prompt 换成页面内弹窗（uiPrompt）
+     2. 高光修补支持「替换 + 新增遗漏」
+     3. 关系网节点渲染时夹到画布内
+     4. 设定碎片与指令库双向自动同步
+     用法：整段粘在 </body> 之前
+     ============================================================ -->
+<style>
+.ui-prompt-overlay{
+  position:fixed;inset:0;background:rgba(40,30,20,.55);
+  display:flex;align-items:center;justify-content:center;
+  z-index:9999;padding:1.5rem;
+  animation:uiPromptFadeIn .15s ease;
+}
+@keyframes uiPromptFadeIn{from{opacity:0}to{opacity:1}}
+.ui-prompt-box{
+  background:#fffcf9;border-radius:20px;padding:1.5rem 1.6rem;
+  max-width:460px;width:100%;border:1px solid #ede3d8;
+  box-shadow:0 20px 50px -18px rgba(60,45,30,.5);
+  animation:uiPromptPop .18s ease;
+}
+@keyframes uiPromptPop{from{transform:scale(.95);opacity:0}to{transform:scale(1);opacity:1}}
+.ui-prompt-msg{
+  font-size:.95rem;color:#3e362e;line-height:1.7;
+  white-space:pre-wrap;margin-bottom:.9rem;
+}
+.ui-prompt-input{
+  width:100%;padding:.6rem .9rem;border-radius:10px;
+  border:1px solid #dacbbc;background:#fffcf9;
+  font-size:.9rem;outline:none;color:#4e4034;
+  font-family:inherit;
+}
+.ui-prompt-input:focus{border-color:#8b6b4b;}
+.ui-prompt-actions{
+  display:flex;gap:.5rem;justify-content:flex-end;margin-top:1rem;
+}
+.ui-prompt-btn{
+  padding:.5rem 1.3rem;border-radius:30px;border:none;
+  font-size:.85rem;font-weight:600;cursor:pointer;
+  transition:all .15s;
+}
+.ui-prompt-btn.cancel{
+  background:#fffcf9;color:#6b4f37;border:1px solid #dacbbc;
+}
+.ui-prompt-btn.cancel:hover{background:#f5ede4;}
+.ui-prompt-btn.ok{
+  background:#8b6b4b;color:#fff;
+  box-shadow:0 4px 12px rgba(139,107,75,.25);
+}
+.ui-prompt-btn.ok:hover{background:#7a5c40;}
+</style>
+
+<script>
+(function(){
+'use strict';
+
+/* ============================================================
+   一、uiPrompt：页面内输入弹窗（Promise 版）
+   ============================================================ */
+
+function uiPrompt(msg, defVal){
+  return new Promise(function(resolve){
+    var overlay = document.createElement('div');
+    overlay.className = 'ui-prompt-overlay';
+    var box = document.createElement('div');
+    box.className = 'ui-prompt-box';
+    box.innerHTML =
+      '<div class="ui-prompt-msg"></div>' +
+      '<input class="ui-prompt-input" type="text">' +
+      '<div class="ui-prompt-actions">' +
+        '<button class="ui-prompt-btn cancel">取消</button>' +
+        '<button class="ui-prompt-btn ok">确定</button>' +
+      '</div>';
+    box.querySelector('.ui-prompt-msg').textContent = msg;
+    var input = box.querySelector('.ui-prompt-input');
+    input.value = (defVal === undefined || defVal === null) ? '' : String(defVal);
+    overlay.appendChild(box);
+    document.body.appendChild(overlay);
+
+    setTimeout(function(){ input.focus(); input.select(); }, 50);
+
+    var done = function(v){
+      if(overlay.parentNode) overlay.parentNode.removeChild(overlay);
+      resolve(v);
+    };
+    box.querySelector('.ui-prompt-btn.cancel').onclick = function(){ done(null); };
+    box.querySelector('.ui-prompt-btn.ok').onclick = function(){ done(input.value); };
+    input.onkeydown = function(e){
+      if(e.key === 'Enter'){ e.preventDefault(); done(input.value); }
+      if(e.key === 'Escape'){ e.preventDefault(); done(null); }
+    };
+    overlay.onclick = function(e){
+      if(e.target === overlay) done(null);
+    };
+  });
+}
+window.uiPrompt = uiPrompt;
+
+/* ============================================================
+   二、把 14 处 prompt 换成 await uiPrompt
+   ============================================================ */
+
+function patchPrompts(){
+
+  /* --- 1. 新建世界 --- */
+  if(typeof createWorld === 'function'){
+    var origCreateWorld = window.createWorld;
+    window.createWorld = async function(type, era){
+      var isOther = type === 'other';
+      var titles = {ancient:'新古代世界',modern:'新现代世界',other:'新快穿世界','':'新世界'};
+      var defVal = isOther ? '新世界' : (titles[era] || '新快穿世界');
+      var title = await uiPrompt('世界名称：', defVal);
+      if(!title) return;
+      var w = {
+        id: uid(),
+        type: isOther ? 'other' : 'kuai',
+        era: isOther ? '' : (era || 'other'),
+        title: title,
+        subtitle:'', source: isOther ? '' : '',
+        status:'ongoing', tags:[], desc:'',
+        pinned:false, order: worlds.length, linkedIds:[],
+        createdAt:new Date().toISOString(), updatedAt:new Date().toISOString()
+      };
+      if(isOther){
+        w.folders=[]; w.ungroupedCharacters=[]; w.events=[];
+        w.relations={nodes:[],edges:[]}; w.chapters=[]; w.images=[];
+      }else{
+        w.archive={background:'',rules:'',endings:''};
+        w.worldArchive=''; w.worldArchiveHistory=[];
+        w.storySummary=''; w.storyNotes='';
+        w.protagonist={name:'',occupation:'',experience:'',traits:[],desc:'',opening:'',ending:'',emoji:'🧑',avatarId:null};
+        w.characters=[]; w.highlights=[]; w.events=[]; w.chapters=[];
+        w.relations={nodes:[],edges:[]}; w.anchor=null;
+      }
+      worlds.push(w);
+      saveJSON(SK_KUAI.WORLDS, worlds);
+      kuaiCloseModal();
+      renderWorldList();
+      showToast('已创建');
+      checkAchievements();
+      if(typeof zhimengNote === 'function') zhimengNote('🌌 新世界《' + title + '》已登记。');
+    };
+  }
+
+  /* --- 2. 添加状态 --- */
+  if(typeof addStatusOption === 'function'){
+    window.addStatusOption = async function(){
+      var emoji = await uiPrompt('状态 emoji：', '🆕');
+      if(!emoji) return;
+      var label = await uiPrompt('状态名称：', '新状态');
+      if(!label) return;
+      statusOptions.push({key:'status_'+uid(), emoji:emoji, label:label});
+      saveJSON(SK_KUAI.STATUS, statusOptions);
+      renderStatusConfig();
+      renderStatusFilterBar();
+      unlockAchievement('config_status');
+    };
+  }
+
+  /* --- 3. 添加分类 --- */
+  if(typeof addCategoryOption === 'function'){
+    window.addCategoryOption = async function(){
+      var name = await uiPrompt('分类名称：', '');
+      if(!name) return;
+      categoryOptions.push(name);
+      saveJSON(SK_KUAI.CATEGORY, categoryOptions);
+      renderCategoryConfig();
+    };
+  }
+
+  /* --- 4. 添加指令分类 --- */
+  if(typeof addCmdCategoryOption === 'function'){
+    window.addCmdCategoryOption = async function(){
+      var name = await uiPrompt('指令分类名称：', '');
+      if(!name) return;
+      cmdCategories.push(name);
+      saveJSON(SK_KUAI.CMDCAT, cmdCategories);
+      renderCmdCatConfig();
+      renderCmdFilterBar();
+    };
+  }
+
+  /* --- 5. 添加稀有度 --- */
+  if(typeof addRarityOption === 'function'){
+    window.addRarityOption = async function(){
+      var key = await uiPrompt('稀有度名称：', '');
+      if(!key) return;
+      rarityOptions.push({key:key, label:key, min:500, max:700, maxTokens:1000, style:'写一个短片段。'});
+      saveJSON(SK_KUAI.RARITY, rarityOptions);
+      renderRarityConfig();
+    };
+  }
+
+  /* --- 6. 添加关系节点 --- */
+  if(typeof addRelationNode === 'function'){
+    window.addRelationNode = async function(worldId){
+      var w = worlds.find(function(x){ return x.id === worldId; });
+      if(!w) return;
+      var label = await uiPrompt('节点名称：', '');
+      if(!label) return;
+      var to = NODE_TYPES.map(function(t,i){ return i + '. ' + t.label; }).join('\n');
+      var idxStr = await uiPrompt('类型：\n' + to, '1');
+      var idx = parseInt(idxStr);
+      w.relations = w.relations || {nodes:[],edges:[]};
+      w.relations.nodes.push({
+        id:'n_'+uid(), label:label.trim(),
+        type: NODE_TYPES[idx] ? NODE_TYPES[idx].key : 'char-other',
+        x: 450 + Math.round((Math.random()-.5)*400),
+        y: 320 + Math.round((Math.random()-.5)*300)
+      });
+      saveJSON(SK_KUAI.WORLDS, worlds);
+      openDetail(worldId);
+    };
+  }
+
+  /* --- 7. 编辑关系节点 --- */
+  if(typeof editRelationNode === 'function'){
+    window.editRelationNode = async function(worldId, index){
+      var w = worlds.find(function(x){ return x.id === worldId; });
+      var n = w && w.relations && w.relations.nodes[index];
+      if(!n) return;
+      var label = await uiPrompt('节点名称：', n.label);
+      if(label === null) return;
+      var to = NODE_TYPES.map(function(t,i){ return i + '. ' + t.label + (t.key === n.type ? ' ←当前' : ''); }).join('\n');
+      var idxStr = await uiPrompt('类型：\n' + to, String(NODE_TYPES.findIndex(function(t){ return t.key === n.type; })));
+      var idx = parseInt(idxStr);
+      n.label = label.trim();
+      if(idx >= 0 && NODE_TYPES[idx]) n.type = NODE_TYPES[idx].key;
+      saveJSON(SK_KUAI.WORLDS, worlds);
+      openDetail(worldId);
+    };
+  }
+
+  /* --- 8. 添加关系连线 --- */
+  if(typeof addRelationEdge === 'function'){
+    window.addRelationEdge = async function(worldId){
+      var w = worlds.find(function(x){ return x.id === worldId; });
+      var nodes = (w && w.relations && w.relations.nodes) || [];
+      if(nodes.length < 2){ showToast('至少两个节点'); return; }
+      var list = nodes.map(function(n,i){ return i + '. ' + n.label; }).join('\n');
+      var fi = parseInt(await uiPrompt('起点：\n' + list, '0'));
+      if(isNaN(fi) || !nodes[fi]) return;
+      var ti = parseInt(await uiPrompt('终点：\n' + list, '1'));
+      if(isNaN(ti) || !nodes[ti] || ti === fi) return;
+      var label = await uiPrompt('关系描述：', '') || '';
+      var to = EDGE_TYPES.map(function(t,i){ return i + '. ' + t.label; }).join('\n');
+      var ty = parseInt(await uiPrompt('类型：\n' + to, '0'));
+      w.relations.edges = w.relations.edges || [];
+      w.relations.edges.push({
+        from:nodes[fi].id, to:nodes[ti].id,
+        label:label.trim(),
+        type: EDGE_TYPES[ty] ? EDGE_TYPES[ty].key : 'other'
+      });
+      saveJSON(SK_KUAI.WORLDS, worlds);
+      openDetail(worldId);
+    };
+  }
+
+  /* --- 9. 编辑关系连线 --- */
+  if(typeof editRelationEdge === 'function'){
+    window.editRelationEdge = async function(worldId, index){
+      var w = worlds.find(function(x){ return x.id === worldId; });
+      var e = w && w.relations && w.relations.edges[index];
+      if(!e) return;
+      var nodes = (w.relations && w.relations.nodes) || [];
+      var list = nodes.map(function(n,i){ return i + '. ' + n.label; }).join('\n');
+      var fi = parseInt(await uiPrompt('起点：\n' + list, String(nodes.findIndex(function(n){ return n.id === e.from; }))));
+      if(isNaN(fi) || !nodes[fi]) return;
+      var ti = parseInt(await uiPrompt('终点：\n' + list, String(nodes.findIndex(function(n){ return n.id === e.to; }))));
+      if(isNaN(ti) || !nodes[ti]) return;
+      var label = await uiPrompt('关系描述：', e.label || '') || '';
+      var to = EDGE_TYPES.map(function(t,i){ return i + '. ' + t.label + (t.key === e.type ? ' ←当前' : ''); }).join('\n');
+      var ty = parseInt(await uiPrompt('类型：\n' + to, String(EDGE_TYPES.findIndex(function(t){ return t.key === e.type; }))));
+      e.from = nodes[fi].id;
+      e.to = nodes[ti].id;
+      e.label = label.trim();
+      if(ty >= 0 && EDGE_TYPES[ty]) e.type = EDGE_TYPES[ty].key;
+      saveJSON(SK_KUAI.WORLDS, worlds);
+      openDetail(worldId);
+    };
+  }
+
+  /* --- 10. 新建指令 --- */
+  if(typeof newCommand === 'function'){
+    window.newCommand = async function(){
+      var title = await uiPrompt('指令标题：', '新指令');
+      if(!title) return;
+      var cat = await uiPrompt('分类（' + cmdCategories.join('/') + '）：', cmdCategories[0] || '其他');
+      commandLib.push({
+        id: uid(), title: title, category: cat || '其他',
+        content:'', versions:[], favorite:false, pinned:false,
+        createdAt:new Date().toISOString(), updatedAt:new Date().toISOString()
+      });
+      saveJSON(SK_KUAI.CMDLIB, commandLib);
+      renderCmdLib();
+    };
+  }
+
+  /* --- 11. 存版本备注 --- */
+  if(typeof saveCmdAsVersion === 'function'){
+    var origSaveCmdAsVersion = window.saveCmdAsVersion;
+    window.saveCmdAsVersion = async function(id){
+      var c = commandLib.find(function(x){ return x.id === id; });
+      if(!c) return;
+      var note = await uiPrompt('版本备注（可空）：', '') || '';
+      c.versions = c.versions || [];
+      c.versions.push({content:$('cmdContent').value, savedAt:new Date().toLocaleString('zh-CN'), note:note});
+      c.content = $('cmdContent').value;
+      c.updatedAt = new Date().toISOString();
+      saveJSON(SK_KUAI.CMDLIB, commandLib);
+      openCmdEdit(id);
+      showToast('已存为新版本');
+    };
+  }
+
+  /* --- 12. 添加分组 --- */
+  if(typeof addRootFolder === 'function'){
+    window.addRootFolder = async function(worldId){
+      var name = await uiPrompt('分组名称：', '第一代');
+      if(!name) return;
+      var w = worlds.find(function(x){ return x.id === worldId; });
+      w.folders = w.folders || [];
+      w.folders.push({id:uid(), name:name, children:[], characters:[]});
+      saveJSON(SK_KUAI.WORLDS, worlds);
+      renderOtherCharTree(w);
+    };
+  }
+
+  /* --- 13. 添加子分组 --- */
+  if(typeof addChildFolder === 'function'){
+    window.addChildFolder = async function(worldId, parentId){
+      var name = await uiPrompt('子分组名称：', '');
+      if(!name) return;
+      var w = worlds.find(function(x){ return x.id === worldId; });
+      function find(arr){
+        for(var i=0;i<arr.length;i++){
+          if(arr[i].id === parentId) return arr[i];
+          var r = find(arr[i].children || []);
+          if(r) return r;
+        }
+        return null;
+      }
+      var p = find(w.folders || []);
+      if(!p) return;
+      p.children = p.children || [];
+      p.children.push({id:uid(), name:name, children:[], characters:[]});
+      saveJSON(SK_KUAI.WORLDS, worlds);
+      renderOtherCharTree(w);
+    };
+  }
+
+  /* --- 14. 重命名分组 --- */
+  if(typeof renameFolder === 'function'){
+    window.renameFolder = async function(worldId, folderId){
+      var w = worlds.find(function(x){ return x.id === worldId; });
+      function find(arr){
+        for(var i=0;i<arr.length;i++){
+          if(arr[i].id === folderId) return arr[i];
+          var r = find(arr[i].children || []);
+          if(r) return r;
+        }
+        return null;
+      }
+      var f = find(w.folders || []);
+      if(!f) return;
+      var name = await uiPrompt('新名称：', f.name);
+      if(!name) return;
+      f.name = name;
+      saveJSON(SK_KUAI.WORLDS, worlds);
+      renderOtherCharTree(w);
+    };
+  }
+
+  /* --- 15. 仓库附件分类 --- */
+  if(typeof setWhCat === 'function'){
+    window.setWhCat = async function(id){
+      var f = whFiles.find(function(x){ return x.id === id; });
+      if(!f) return;
+      var c = await uiPrompt('分类名（可空）:', f.cat || '');
+      if(c === null) return;
+      f.cat = c.trim();
+      saveJSON(SK_SPACE.FILES, whFiles);
+      renderWh();
+    };
+  }
+
+  console.log('[综合优化补丁] prompt 已全部替换为页面内弹窗。');
+}
+
+/* ============================================================
+   三、高光修补支持新增遗漏
+   ============================================================ */
+
+function patchHighlightMerge(){
+  if(typeof mergeFixedHighlights !== 'function') return;
+  var orig = window.mergeFixedHighlights;
+  window.mergeFixedHighlights = function(worldId){
+    var w = worlds.find(function(x){ return x.id === worldId; });
+    if(!w){ showToast('找不到世界'); return; }
+    var raw = ($('hlFixJSON') ? $('hlFixJSON').value : '').trim();
+    if(!raw){ showToast('请粘贴 JSON'); return; }
+    var obj;
+    try { obj = JSON.parse(raw); } catch(e){ showToast('❌ JSON 解析失败：' + e.message); return; }
+    var incoming = Array.isArray(obj) ? obj : (Array.isArray(obj.highlights) ? obj.highlights : []);
+    if(!incoming.length){ showToast('没有可合并的高光'); return; }
+
+    w.highlights = w.highlights || [];
+    var replaced = 0, added = 0, skipped = 0;
+
+    incoming.forEach(function(nh){
+      if(!nh || !nh.desc || !String(nh.desc).trim()){ skipped++; return; }
+      var title = (nh.title || '').trim();
+      if(title){
+        var exist = w.highlights.find(function(h){ return (h.title||'').trim() === title; });
+        if(exist){
+          exist.desc = nh.desc;
+          if(nh.char) exist.char = nh.char;
+          replaced++;
+          return;
+        }
+      }
+      /* 没匹配到 → 新增 */
+      var newTitle = title || ('高光 ' + (w.highlights.length + 1));
+      w.highlights.push({
+        title: newTitle,
+        char: nh.char || '',
+        desc: nh.desc
+      });
+      added++;
+    });
+
+    w.updatedAt = new Date().toISOString();
+    saveJSON(SK_KUAI.WORLDS, worlds);
+    kuaiCloseModal();
+    showToast('合并完成：替换 ' + replaced + '，新增 ' + added + (skipped ? ('，跳过 ' + skipped) : ''));
+    renderDetail(w);
+    setTimeout(function(){ switchDetailTab('highlights'); }, 50);
+  };
+  console.log('[综合优化补丁] 高光修补已支持新增遗漏。');
+}
+
+/* ============================================================
+   四、关系网节点夹到画布内
+   ============================================================ */
+
+function patchRelationBounds(){
+  if(typeof renderRelationSVG !== 'function') return;
+  var orig = window.renderRelationSVG;
+  window.renderRelationSVG = function(rel, worldId){
+    rel = rel || {nodes:[],edges:[]};
+    var nodes = rel.nodes || [];
+    /* 强制夹到画布内 */
+    nodes.forEach(function(n){
+      if(typeof n.x !== 'number' || isNaN(n.x)) n.x = 450;
+      if(typeof n.y !== 'number' || isNaN(n.y)) n.y = 320;
+      n.x = Math.max(50, Math.min(850, n.x));
+      n.y = Math.max(50, Math.min(600, n.y));
+    });
+    return orig(rel, worldId);
+  };
+  console.log('[综合优化补丁] 关系网节点已限制在画布内。');
+}
+
+/* ============================================================
+   五、设定碎片与指令库双向同步
+   ============================================================ */
+
+function syncArchiveToCmdLib(worldTitle, content){
+  var title = '设定碎片 · ' + (worldTitle || '未命名');
+  var cat = '设定碎片';
+  var exist = commandLib.find(function(c){ return c.title === title && c.category === cat; });
+  if(exist){
+    if(exist.content !== content){
+      exist.versions = exist.versions || [];
+      exist.versions.push({content: exist.content || '', savedAt: new Date().toLocaleString('zh-CN'), note: '同步前自动备份'});
+      if(exist.versions.length > 30) exist.versions = exist.versions.slice(-30);
+      exist.content = content;
+      exist.updatedAt = new Date().toISOString();
+      saveJSON(SK_KUAI.CMDLIB, commandLib);
+    }
+  } else {
+    commandLib.push({
+      id: uid(), title: title, category: cat, content: content,
+      versions:[], favorite:false, pinned:false,
+      createdAt:new Date().toISOString(), updatedAt:new Date().toISOString()
+    });
+    saveJSON(SK_KUAI.CMDLIB, commandLib);
+  }
+  try { renderCmdLib(); } catch(e){}
+}
+
+function syncCmdLibToArchive(cmdTitle, content){
+  var prefix = '设定碎片 · ';
+  if(cmdTitle.indexOf(prefix) !== 0) return;
+  var worldTitle = cmdTitle.slice(prefix.length);
+  var w = worlds.find(function(x){ return x.title === worldTitle; });
+  if(!w) return;
+  if(w.worldArchive !== content){
+    w.worldArchive = content;
+    w.updatedAt = new Date().toISOString();
+    saveJSON(SK_KUAI.WORLDS, worlds);
+  }
+}
+
+function patchArchiveSync(){
+  /* 导入世界 → 自动存入指令库 */
+  if(typeof importKuaiWorld === 'function'){
+    var origImport = window.importKuaiWorld;
+    window.importKuaiWorld = function(obj){
+      origImport(obj);
+      try {
+        var ws = worlds || [];
+        var w = ws[ws.length - 1];
+        if(w && w.type === 'kuai' && w.worldArchive && w.worldArchive.trim()){
+          syncArchiveToCmdLib(w.title, w.worldArchive);
+        }
+      } catch(e){ console.warn('[综合优化补丁] 导入同步失败：', e); }
+    };
+  }
+
+  /* 保存 worldArchive → 同步到指令库 */
+  if(typeof saveWorldArchiveText === 'function'){
+    var origSaveArchive = window.saveWorldArchiveText;
+    window.saveWorldArchiveText = function(worldId, value){
+      origSaveArchive(worldId, value);
+      try {
+        var w = worlds.find(function(x){ return x.id === worldId; });
+        if(w) syncArchiveToCmdLib(w.title, value);
+      } catch(e){ console.warn('[综合优化补丁] 保存碎片同步失败：', e); }
+    };
+  }
+
+  /* 保存指令 → 同步回世界 */
+  if(typeof saveCmd === 'function'){
+    var origSaveCmd = window.saveCmd;
+    window.saveCmd = function(id){
+      var c = commandLib.find(function(x){ return x.id === id; });
+      if(!c){ origSaveCmd(id); return; }
+      var newTitle = ($('cmdTitle') ? $('cmdTitle').value.trim() : '') || '未命名';
+      var newCat = $('cmdCat') ? $('cmdCat').value : c.category;
+      var newContent = $('cmdContent') ? $('cmdContent').value : c.content;
+      c.title = newTitle;
+      c.category = newCat;
+      c.content = newContent;
+      c.updatedAt = new Date().toISOString();
+      saveJSON(SK_KUAI.CMDLIB, commandLib);
+      try { syncCmdLibToArchive(newTitle, newContent); } catch(e){ console.warn('[综合优化补丁] 指令同步回世界失败：', e); }
+      kuaiCloseModal();
+      renderCmdLib();
+      if(typeof unlockAchievement === 'function') unlockAchievement('cmdlib_first');
+      showToast('已保存');
+    };
+  }
+
+  console.log('[综合优化补丁] 设定碎片与指令库已双向同步。');
+}
+
+/* ============================================================
+   六、给高光修补模板追加"遗漏检查"
+   ============================================================ */
+
+function patchHlFixPrompt(){
+  if(typeof DEFAULT_HL_FIX_PROMPT !== 'string') return;
+  if(DEFAULT_HL_FIX_PROMPT.indexOf('【遗漏检查') >= 0) return;
+  var extra = '\n\n【遗漏检查 · 重要】\n除了重写已有高光，还要扫描原始正文，找出以下"遗漏的重要互动"，一并输出：\n- 主控与可攻略角色的表白、告白、心意流露\n- 肢体接触（拥抱、牵手、亲吻、越界触碰等）\n- 关系转折（首次越界、首次宣告占有、首次失控）\n- 主控个人的高光时刻\n- 可攻略角色个人的高光时刻\n新增的高光，title 自己起一个简短标题，char 填主控名或可攻略角色名，desc 从原文逐字摘抄。\n如果原文里没有遗漏，就只输出已有高光的重写版本。';
+  try {
+    window.DEFAULT_HL_FIX_PROMPT = DEFAULT_HL_FIX_PROMPT + extra;
+  } catch(e){}
+}
+
+/* ============================================================
+   启动
+   ============================================================ */
+
+function boot(){
+  patchPrompts();
+  patchHighlightMerge();
+  patchRelationBounds();
+  patchArchiveSync();
+  patchHlFixPrompt();
+  console.log('[综合优化补丁 v1] 全部加载完成。');
+}
+
+if(document.readyState === 'loading'){
+  document.addEventListener('DOMContentLoaded', function(){ setTimeout(boot, 500); });
+} else {
+  setTimeout(boot, 500);
+}
+
+})();
+</script>
+
+<!-- ============================================================
+     详情页 tab 记忆补丁
+     作用：保存任何内容后，详情页保持当前 tab，不跳回故事总纲
+     原理：记录上次激活的 tab，openDetail 后自动切回
+     用法：整段粘在 </body> 之前
+     ============================================================ -->
+<script>
+(function(){
+'use strict';
+
+/* 记录当前详情页的 tab */
+var lastDetailTab = 'overview';
+var lastDetailWorldId = null;
+
+/* 劫持 switchDetailTab：每次切换时更新记录 */
+function patchSwitchDetailTab(){
+  if(typeof switchDetailTab !== 'function') return;
+  var orig = window.switchDetailTab;
+  window.switchDetailTab = function(tabKey){
+    lastDetailTab = tabKey || 'overview';
+    return orig(tabKey);
+  };
+}
+
+/* 劫持 openDetail：渲染后，自动切回上次的 tab */
+function patchOpenDetail(){
+  if(typeof openDetail !== 'function') return;
+  var orig = window.openDetail;
+  window.openDetail = function(id){
+    /* 如果是同一个世界，保留上次的 tab；如果是新世界，重置为 overview */
+    var isSameWorld = (lastDetailWorldId === id);
+    var targetTab = isSameWorld ? lastDetailTab : 'overview';
+
+    orig(id);
+
+    lastDetailWorldId = id;
+
+    /* 等 DOM 渲染完再切 tab */
+    setTimeout(function(){
+      if(targetTab !== 'overview'){
+        /* 切到目标 tab */
+        if(typeof switchDetailTab === 'function'){
+          /* 直接调用原始版本，避免再次更新 lastDetailTab */
+          var btns = document.querySelectorAll('.detail-nav .nav-btn');
+          var secs = document.querySelectorAll('.detail-section');
+          btns.forEach(function(b){
+            b.classList.toggle('active', b.dataset.section === targetTab);
+          });
+          secs.forEach(function(s){
+            s.classList.toggle('active', s.id === 'section-' + targetTab);
+          });
+          /* 特殊 tab 要触发的渲染 */
+          try{
+            if(targetTab === 'relations') setTimeout(function(){ bindRelationSVG(id); }, 30);
+            if(targetTab === 'attachments') renderWorldAttachments(id);
+            if(targetTab === 'images') renderOtherWorldImages(id);
+            if(targetTab === 'chapters') renderChapters(id);
+            if(targetTab === 'family') renderFamilyTree(id);
+            if(targetTab === 'worldarchive') renderWorldArchiveTab(id);
+          }catch(e){}
+        }
+      } else {
+        /* overview：确保是激活状态 */
+        var btns = document.querySelectorAll('.detail-nav .nav-btn');
+        var secs = document.querySelectorAll('.detail-section');
+        btns.forEach(function(b){
+          b.classList.toggle('active', b.dataset.section === 'overview');
+        });
+        secs.forEach(function(s){
+          s.classList.toggle('active', s.id === 'section-overview');
+        });
+      }
+    }, 30);
+  };
+}
+
+/* 兜底：用户点左侧导航切 tab 时，也要记录 */
+function bindTabClick(){
+  document.addEventListener('click', function(e){
+    var btn = e.target.closest('.detail-nav .nav-btn');
+    if(btn && btn.dataset.section){
+      lastDetailTab = btn.dataset.section;
+    }
+  }, true);
+}
+
+/* 启动 */
+function boot(){
+  patchSwitchDetailTab();
+  patchOpenDetail();
+  bindTabClick();
+  console.log('[详情页 tab 记忆补丁] 已加载。保存后不会跳回故事总纲。');
+}
+
+if(document.readyState === 'loading'){
+  document.addEventListener('DOMContentLoaded', function(){ setTimeout(boot, 700); });
+} else {
+  setTimeout(boot, 700);
+}
+
+})();
+</script>
+
+<!-- ============================================================
+     事件卡片展示补丁
+     作用：
+     1. 事件卡片直接展示 summary 全文，不再截断
+     2. 顶部一行：稀有度 + 标题 + IF标记 + 角色名 + 编辑/删除
+     3. 去掉「快速查看」弹窗、去掉底部卡面词/句
+     用法：整段粘在 </body> 之前
+     ============================================================ -->
+<style>
+/* 事件卡片：正文完整展示 */
+.event-item .ev-full-summary{
+  font-size:.88rem;
+  color:#3e362e;
+  line-height:1.9;
+  white-space:pre-wrap;
+  word-break:break-word;
+  margin:.3rem 0 0;
+  user-select:text;
+}
+
+/* 顶部角色名小标签 */
+.event-item .ev-top .ev-char{
+  font-size:.72rem;
+  background:#f0e8df;
+  color:#8b6b4b;
+  padding:.15rem .6rem;
+  border-radius:20px;
+  font-weight:600;
+  flex-shrink:0;
+}
+
+/* 顶部 IF 标记 */
+.event-item .ev-top .ev-if{
+  font-size:.65rem;
+  background:#d9c9e6;
+  color:#4a3a5a;
+  padding:.1rem .5rem;
+  border-radius:12px;
+  flex-shrink:0;
+}
+</style>
+
+<script>
+(function(){
+'use strict';
+
+/* ============================================================
+   构建单张事件卡片
+   ============================================================ */
+
+function buildEventCard(worldId, e, index){
+  var rarity = e.rarity || 'R';
+  var isIf = (e.type === 'if');
+  var summary = e.summary || '';
+  var char = e.char || '';
+
+  var html = '<div class="event-item">';
+
+  /* 顶部：稀有度 + 标题 + IF + 角色名 + 操作 */
+  html += '<div class="ev-top">';
+  html += '<span class="ev-rarity ' + rarity + '">' + rarity + '</span>';
+  html += '<span class="ev-title">' + esc(e.title || '') + '</span>';
+  if (isIf) {
+    html += '<span class="ev-if">IF</span>';
+  }
+  if (char) {
+    html += '<span class="ev-char">👤 ' + esc(char) + '</span>';
+  }
+  html += '<div class="ev-actions">' +
+    '<button onclick="event.stopPropagation();editEvent(\'' + worldId + '\',' + index + ')">✏️</button>' +
+    '<button onclick="event.stopPropagation();deleteEvent(\'' + worldId + '\',' + index + ')">🗑</button>' +
+  '</div>';
+  html += '</div>';
+
+  /* 正文：完整 summary */
+  html += '<div class="ev-full-summary">' + esc(summary) + '</div>';
+
+  html += '</div>';
+  return html;
+}
+
+/* ============================================================
+   劫持 renderDetail，重写事件区
+   ============================================================ */
+
+function patchRenderDetail(){
+  if (typeof renderDetail !== 'function') return;
+  var orig = window.renderDetail;
+  window.renderDetail = function(w, activeTab){
+    /* 先调原渲染 */
+    orig(w, activeTab);
+
+    /* 然后重写事件区 */
+    setTimeout(function(){
+      try {
+        var sec = document.getElementById('section-events');
+        if (!sec) return;
+        var worldId = w.id;
+        var events = w.events || [];
+
+        /* 保留原标题栏里的「添加」按钮 */
+        var cardTitle = sec.querySelector('.card-title');
+        var addBtnHtml = '';
+        if (cardTitle) {
+          var addBtn = cardTitle.querySelector('.card-actions');
+          if (addBtn) addBtnHtml = addBtn.outerHTML;
+        }
+
+        var html = '<div class="card">' +
+          '<div class="card-title">📌 重大事件' + addBtnHtml + '</div>';
+
+        if (!events.length) {
+          html += '<div class="empty-hint">还没有事件。点右上角「添加」。</div>';
+        } else {
+          html += '<div class="event-list">';
+          events.forEach(function(e, i){
+            html += buildEventCard(worldId, e, i);
+          });
+          html += '</div>';
+        }
+
+        html += '</div>';
+        sec.innerHTML = html;
+      } catch(err){
+        console.warn('[事件卡片补丁] 重写事件区失败：', err);
+      }
+    }, 20);
+  };
+}
+
+/* ============================================================
+   启动
+   ============================================================ */
+
+function boot(){
+  patchRenderDetail();
+  console.log('[事件卡片补丁] 已加载。事件卡片直接展示全文。');
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', function(){ setTimeout(boot, 800); });
+} else {
+  setTimeout(boot, 800);
+}
+
+})();
+</script>
+
+<!-- ============================================================
+     世界详情页布局优化 v6 · JS 强制高度
+     作用：固定顶部简介栏 + 左侧分栏，只有右侧内容区滚动
+     原理：JS 读取屏幕高度，直接把 px 高度内联到元素上
+     用法：整段替换之前的详情页补丁
+     ============================================================ -->
+<script>
+(function(){
+'use strict';
+
+/* ============================================================
+   核心：重新计算并设置高度
+   ============================================================ */
+
+function recalcDetailHeights(){
+  var main = document.querySelector('#view-kuai .main-area');
+  if(!main) return;
+  if(!main.classList.contains('detail-mode')) return;
+
+  var header = main.querySelector('.detail-header');
+  var nav = main.querySelector('.detail-nav');
+  var body = main.querySelector('.detail-body');
+
+  if(!header || !body) return;
+
+  /* 屏幕可用高度 */
+  var viewportH = window.innerHeight;
+
+  /* 主区域上下内边距（从计算样式读取） */
+  var mainStyle = getComputedStyle(main);
+  var padTop = parseFloat(mainStyle.paddingTop) || 0;
+  var padBottom = parseFloat(mainStyle.paddingBottom) || 0;
+
+  /* 简介栏高度（含 margin-bottom） */
+  var headerH = header.offsetHeight;
+  var headerMB = parseFloat(getComputedStyle(header).marginBottom) || 0;
+
+  /* 计算内容区可用高度 */
+  var availH = viewportH - padTop - padBottom - headerH - headerMB - 20; /* 20 是安全余量 */
+  if(availH < 200) availH = 200; /* 最小兜底 */
+
+  /* 写死高度到右侧内容区 */
+  body.style.height = availH + 'px';
+  body.style.maxHeight = availH + 'px';
+  body.style.overflowY = 'auto';
+  body.style.boxSizing = 'border-box';
+
+  /* 左侧分栏同样高度 */
+  if(nav){
+    nav.style.maxHeight = availH + 'px';
+    nav.style.overflowY = 'auto';
+  }
+
+  /* 外层禁止滚 */
+  main.style.overflow = 'hidden';
+  main.style.height = viewportH + 'px';
+
+  console.log('[详情页 v6] 已设置内容区高度：' + availH + 'px');
+}
+
+/* ============================================================
+   进入 / 退出详情页模式
+   ============================================================ */
+
+function enterDetailMode(){
+  var main = document.querySelector('#view-kuai .main-area');
+  if(main) main.classList.add('detail-mode');
+  /* 等 DOM 渲染完再算高度 */
+  setTimeout(recalcDetailHeights, 30);
+  setTimeout(recalcDetailHeights, 100); /* 再来一次，防渲染延迟 */
+}
+
+function exitDetailMode(){
+  var main = document.querySelector('#view-kuai .main-area');
+  if(main) main.classList.remove('detail-mode');
+  /* 清掉内联高度，恢复原样 */
+  var body = main && main.querySelector('.detail-body');
+  var nav = main && main.querySelector('.detail-nav');
+  if(body){ body.style.height = ''; body.style.maxHeight = ''; body.style.overflowY = ''; }
+  if(nav){ nav.style.maxHeight = ''; nav.style.overflowY = ''; }
+  if(main){ main.style.overflow = ''; main.style.height = ''; }
+}
+
+/* ============================================================
+   劫持：openDetail / backToWorldList / switchTab
+   ============================================================ */
+
+function patchOpenDetail(){
+  if(typeof openDetail !== 'function') return;
+  var orig = window.openDetail;
+  window.openDetail = function(id){
+    orig(id);
+    setTimeout(enterDetailMode, 20);
+  };
+}
+
+function patchBackToWorldList(){
+  if(typeof backToWorldList !== 'function') return;
+  var orig = window.backToWorldList;
+  window.backToWorldList = function(){
+    exitDetailMode();
+    return orig();
+  };
+}
+
+function patchSwitchTab(){
+  if(typeof switchTab !== 'function') return;
+  var orig = window.switchTab;
+  window.switchTab = function(tabId){
+    if(tabId !== 'page-detail') exitDetailMode();
+    return orig(tabId);
+  };
+}
+
+function patchSwitchDetailTab(){
+  if(typeof switchDetailTab !== 'function') return;
+  var orig = window.switchDetailTab;
+  window.switchDetailTab = function(tabKey){
+    orig(tabKey);
+    /* 切 tab 后重新算一次 */
+    setTimeout(recalcDetailHeights, 30);
+  };
+}
+
+function bindFallback(){
+  document.addEventListener('click', function(e){
+    var btn = e.target.closest('.sidebar .nav-item');
+    if(btn) exitDetailMode();
+  }, true);
+}
+
+/* 窗口大小变化时重算 */
+window.addEventListener('resize', function(){
+  setTimeout(recalcDetailHeights, 50);
+});
+
+/* 调试 */
+window.__recalcDetailHeights = recalcDetailHeights;
+
+/* ============================================================
+   启动
+   ============================================================ */
+
+function boot(){
+  patchOpenDetail();
+  patchBackToWorldList();
+  patchSwitchTab();
+  patchSwitchDetailTab();
+  bindFallback();
+  console.log('[详情页布局优化 v6] 已加载。JS 强制高度。');
+}
+
+if(document.readyState === 'loading'){
+  document.addEventListener('DOMContentLoaded', function(){ setTimeout(boot, 600); });
+} else {
+  setTimeout(boot, 600);
+}
+
+})();
+</script>
+<!-- ============================================================
+     详情页 tab 切换滚动复位
+     作用：切换详情页小分栏时，内容区滚动条回到顶部
+     用法：追加在 v6 补丁之后
+     ============================================================ -->
+<script>
+(function(){
+'use strict';
+
+function patchSwitchDetailTab(){
+  if(typeof switchDetailTab !== 'function') return;
+  var orig = window.switchDetailTab;
+  window.switchDetailTab = function(tabKey){
+    orig(tabKey);
+    /* 切 tab 后滚动归零 */
+    setTimeout(function(){
+      var main = document.querySelector('#view-kuai .main-area');
+      if(!main) return;
+      var body = main.querySelector('.detail-body');
+      if(body) body.scrollTop = 0;
+    }, 30);
+  };
+  console.log('[详情页滚动复位] 已加载。切 tab 时滚动回顶部。');
+}
+
+function boot(){
+  patchSwitchDetailTab();
+}
+
+if(document.readyState === 'loading'){
+  document.addEventListener('DOMContentLoaded', function(){ setTimeout(boot, 900); });
+} else {
+  setTimeout(boot, 900);
 }
 
 })();
