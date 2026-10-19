@@ -10112,5 +10112,1024 @@ if(document.readyState === 'loading'){
 })();
 </script>
 
+<!-- ============================================================
+     番茄钟 · 路过弹框 v2
+     修复：
+     1. 恢复"两次关"：第一次关 → 第二句（夸/提醒）→ 第二次真关
+     2. 路过消息写进 pms 的同时，累加 pmConv[name].visitCount
+     3. 关闭按钮用捕获阶段委托，防止被别的 onclick 抢
+     ============================================================ -->
+<script>
+(function(){
+'use strict';
+
+/* ---------- 状态（独立于原补丁） ---------- */
+var PV = {
+  data: null,          // 当前弹框数据 { ch, shownAt, phase, firstLine, secondLine }
+  lastVisitTs: 0
+};
+
+/* ---------- 工具 ---------- */
+function pvEsc(s){
+  if(s === null || s === undefined) return '';
+  return String(s).replace(/[&<>"']/g, function(m){
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m];
+  });
+}
+function pvToast(msg){
+  try{ if(typeof showSpaceToast === 'function'){ showSpaceToast(msg); return; } }catch(e){}
+  try{ if(typeof showToast === 'function'){ showToast(msg); return; } }catch(e){}
+}
+
+/* ---------- 拿当前弹框 DOM ---------- */
+function getPopup(){
+  return document.getElementById('pomoVisitPopup');
+}
+function getTextEl(){
+  var p = getPopup();
+  return p ? p.querySelector('#pvpText') : null;
+}
+function getCloseBtn(){
+  var p = getPopup();
+  return p ? p.querySelector('#pvpClose, .pvp-close') : null;
+}
+function getNameEl(){
+  var p = getPopup();
+  return p ? p.querySelector('#pvpName') : null;
+}
+function getAvatarEl(){
+  var p = getPopup();
+  return p ? p.querySelector('#pvpAvatar') : null;
+}
+
+/* ---------- 写进私聊 + 累加来访次数 ---------- */
+function pvWritePM(ch, text){
+  try{
+    if(!window.pms) return;
+    var name = ch.name;
+    if(!window.pms[name]) window.pms[name] = { messages: [] };
+    var now = new Date();
+    var dstr = now.getFullYear() + '-' +
+      String(now.getMonth()+1).padStart(2,'0') + '-' +
+      String(now.getDate()).padStart(2,'0');
+    var tstr = String(now.getHours()).padStart(2,'0') + ':' +
+      String(now.getMinutes()).padStart(2,'0');
+    window.pms[name].messages.push({
+      role: 'visit',
+      text: text,
+      time: dstr + ' ' + tstr
+    });
+    try{ saveJSON(SK_SPACE.PM, window.pms); }catch(e){}
+
+    /* ★ 关键：累加 visitCount，这样联系人才会显示"来过 N 次" */
+    if(window.pmConv){
+      if(!window.pmConv[name]) window.pmConv[name] = { visitCount:0, lastReadIdx:-1 };
+      window.pmConv[name].visitCount = (window.pmConv[name].visitCount || 0) + 1;
+      try{ saveJSON(SK_SPACE.PMCONV, window.pmConv); }catch(e){}
+    }
+  }catch(e){ console.warn('[路过弹框] 写私聊失败：', e); }
+}
+
+/* ---------- 生成台词（优先走 AI，失败走兜底） ---------- */
+async function pvGenerateText(ch, kind){
+  var cfg = null;
+  try{
+    if(window.__ZM_MERGE__ && window.__ZM_MERGE__.getKuaiChannel){
+      cfg = window.__ZM_MERGE__.getKuaiChannel();
+    }
+  }catch(e){}
+
+  var sceneMap = {
+    'pass-by': '你路过，看到用户正在专注地学习/工作，你轻轻说一句。不要打扰他。',
+    'praise': '用户刚才一直在专注，你看到他这么认真，夸他一句。',
+    'remind': '用户刚才好像没在专注，很快就从专注状态里出来了，你提醒他别分心，语气可以带点关心。'
+  };
+  var scene = sceneMap[kind] || sceneMap['pass-by'];
+
+  if(!cfg || !cfg.enabled || !cfg.apiKey || !cfg.model || !cfg.baseUrl){
+    return pvFallback(ch, kind);
+  }
+
+  var mainName = '你';
+  try{
+    var ai = JSON.parse(localStorage.getItem('zm_ai11') || '{}');
+    if(ai.zhimengCall) mainName = ai.zhimengCall;
+  }catch(e){}
+
+  var sys = '你扮演「' + ch.name + '」，在一个专注类 App 里陪伴用户。\n' +
+    '身份：' + (ch.role || '（未填）') + '\n' +
+    '表面性格：' + (ch.surface || '（未填）') + '\n' +
+    '内心：' + (ch.inner || '（未填）') + '\n' +
+    '标志台词：' + (ch.quote || '（未填）') + '\n' +
+    '与用户的关系：' + (ch.relation || '（未填）') + '\n\n' +
+    '【场景】' + scene + '\n\n' +
+    '【规则】\n' +
+    '1. 用第一人称，像本人说话。\n' +
+    '2. 1-2 句话，15-40 字。\n' +
+    '3. 符合你的性格，不要用系统播报的语气。\n' +
+    '4. 不要用括号写动作、表情、性格标签。\n' +
+    '5. 不要自称 AI。\n' +
+    '6. 直接说，不要加引号。';
+
+  try{
+    var ctrl = new AbortController();
+    var t = setTimeout(function(){ ctrl.abort(); }, 8000);
+    var res = await fetch(cfg.baseUrl + '/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type':'application/json', 'Authorization':'Bearer ' + cfg.apiKey },
+      body: JSON.stringify({
+        model: cfg.model,
+        messages: [
+          { role:'system', content: sys },
+          { role:'user', content: '说一句吧。' }
+        ],
+        temperature: 0.95,
+        max_tokens: 120,
+        chat_template_kwargs: { enable_thinking: false },
+        think: false
+      }),
+      signal: ctrl.signal
+    });
+    clearTimeout(t);
+    if(!res.ok) throw new Error('HTTP ' + res.status);
+    var data = await res.json();
+    var reply = (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content || '').trim();
+    reply = reply.replace(/^["'“”「『]/, '').replace(/["'“”」』]$/, '');
+    reply = reply.replace(/^（[^）]*）\s*/, '').replace(/^\([^)]*\)\s*/, '');
+    if(reply) return reply;
+    return pvFallback(ch, kind);
+  }catch(e){
+    return pvFallback(ch, kind);
+  }
+}
+
+function pvFallback(ch, kind){
+  var base = {
+    'pass-by': ['路过，看到你在忙。','没打扰你吧。','嗯，你在专注。','刚好经过。','看你一眼就走。','在忙啊。','过来看看。','嗯，你在。','不打扰你了。','路过，你继续。'],
+    'praise': ['专注得很好，继续。','一直在认真啊。','嗯，做得好。','厉害，一直没走神。','看你这么专注，我就放心了。','做得好，继续。','嗯，很棒。','这个状态不错。','认真的人最好看。','我就知道你可以。'],
+    'remind': ['这么快就出来了？别分心。','怎么这么快就关了？','走神了？','别偷懒。','嗯？刚才不是说要专注？','回来了？继续啊。','这么快？','分心了吧。','别走神。','嗯，再坚持一下。']
+  };
+  var pool = base[kind] || base['pass-by'];
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+
+/* ---------- 显示弹框 ---------- */
+async function pvShowPopup(){
+  if(PV.data) return;               /* 已有一个在显示 */
+  var now = Date.now();
+  if(now - PV.lastVisitTs < 2000) return;
+  PV.lastVisitTs = now;
+
+  var chars = [];
+  try{
+    if(window.__ZM_MERGE__ && window.__ZM_MERGE__.getKuaiChars){
+      chars = window.__ZM_MERGE__.getKuaiChars() || [];
+    }
+  }catch(e){}
+  if(!chars.length) return;
+
+  var pick = chars[Math.floor(Math.random() * chars.length)];
+  var ch = pick.ch;
+  var emoji = (ch.emoji && ch.emoji.trim()) ? ch.emoji : '💗';
+
+  var popup = getPopup();
+  if(!popup) return;
+
+  var nameEl = getNameEl();
+  var avatarEl = getAvatarEl();
+  var textEl = getTextEl();
+  var closeBtn = getCloseBtn();
+
+  if(nameEl) nameEl.textContent = ch.name;
+  if(avatarEl) avatarEl.innerHTML = emoji;
+
+  /* 头像如果是图片 */
+  if(ch.avatarId){
+    try{
+      var db = await new Promise(function(res, rej){
+        var req = indexedDB.open('wenyou_storage', 3);
+        req.onsuccess = function(){ res(req.result); };
+        req.onerror = function(){ rej(req.error); };
+      });
+      var rec = await new Promise(function(res){
+        var tx = db.transaction('avatars', 'readonly');
+        var r = tx.objectStore('avatars').get(ch.avatarId);
+        r.onsuccess = function(){ res(r.result); };
+        r.onerror = function(){ res(null); };
+      });
+      if(rec && rec.data && avatarEl){
+        avatarEl.innerHTML = '<img src="' + rec.data + '">';
+      }
+    }catch(e){}
+  }
+
+  if(textEl) textEl.innerHTML = '<span class="pvp-loading">……</span>';
+  if(closeBtn){ closeBtn.textContent = '关闭'; closeBtn.disabled = false; }
+
+  popup.classList.add('show');
+
+  PV.data = {
+    ch: ch,
+    shownAt: Date.now(),
+    phase: 'first',
+    firstLine: '',
+    secondLine: ''
+  };
+
+  var firstLine = await pvGenerateText(ch, 'pass-by');
+  PV.data.firstLine = firstLine;
+  if(textEl) textEl.textContent = firstLine;
+
+  /* 写私聊 + 累加来访次数 */
+  pvWritePM(ch, firstLine);
+}
+
+/* ---------- 关闭：两次逻辑 ---------- */
+async function pvClose(){
+  if(!PV.data){
+    /* 没有状态，直接强制关 */
+    var p = getPopup();
+    if(p) p.classList.remove('show');
+    return;
+  }
+
+  var popup = getPopup();
+  var textEl = getTextEl();
+  var closeBtn = getCloseBtn();
+  var ch = PV.data.ch;
+
+  /* 第一次关：显示第二句（夸 / 提醒），不关 */
+  if(PV.data.phase === 'first'){
+    var stay = Date.now() - PV.data.shownAt;
+    var stayMin = stay / 60000;
+    var kind = (stayMin < 5) ? 'remind' : 'praise';
+
+    PV.data.phase = 'second';
+    if(closeBtn){ closeBtn.disabled = true; closeBtn.textContent = '…'; }
+    if(textEl) textEl.innerHTML = '<span class="pvp-loading">……</span>';
+
+    var secondLine = await pvGenerateText(ch, kind);
+    PV.data.secondLine = secondLine;
+
+    if(textEl) textEl.textContent = secondLine;
+    if(closeBtn){ closeBtn.disabled = false; closeBtn.textContent = '关闭'; }
+
+    /* 第二句也写进私聊，但不再累加 visitCount（一次路过算一次） */
+    try{
+      if(window.pms && window.pms[ch.name]){
+        var now = new Date();
+        var dstr = now.getFullYear() + '-' +
+          String(now.getMonth()+1).padStart(2,'0') + '-' +
+          String(now.getDate()).padStart(2,'0');
+        var tstr = String(now.getHours()).padStart(2,'0') + ':' +
+          String(now.getMinutes()).padStart(2,'0');
+        window.pms[ch.name].messages.push({
+          role: 'visit',
+          text: secondLine,
+          time: dstr + ' ' + tstr
+        });
+        try{ saveJSON(SK_SPACE.PM, window.pms); }catch(e){}
+      }
+    }catch(e){}
+
+    return;
+  }
+
+  /* 第二次关：真正关闭 */
+  if(popup) popup.classList.remove('show');
+  PV.data = null;
+}
+
+/* ---------- 绑定关闭按钮（捕获阶段，防止被抢） ---------- */
+function bindClose(){
+  var btn = getCloseBtn();
+  if(!btn) return;
+  if(btn.__pvBound) return;
+  btn.__pvBound = true;
+  btn.addEventListener('click', function(e){
+    e.preventDefault();
+    e.stopPropagation();
+    pvClose();
+  }, true);
+}
+
+/* ---------- 暴露给外部：让原 patch 走我们的逻辑 ---------- */
+window.pomoVisitClose = pvClose;
+
+/* ---------- 自动触发：进入专注阶段时安排 1~3 次 ---------- */
+var focusTimer = null;
+var lastFocusState = false;
+
+function checkFocusState(){
+  try{
+    var panel = document.getElementById('panel-tomato');
+    if(!panel) return;
+    var state = panel.querySelector('#tomatoState');
+    if(!state) return;
+    var text = state.textContent || '';
+    var focusing = text.indexOf('专注中') >= 0;
+
+    if(focusing && !lastFocusState){
+      /* 刚进入专注：安排弹框 */
+      if(focusTimer) clearTimeout(focusTimer);
+      var totalMin = 25;
+      try{
+        if(typeof window.pomoRemainSec !== 'undefined' && window.pomoRemainSec > 0){
+          totalMin = Math.round(window.pomoRemainSec / 60);
+        }
+      }catch(e){}
+      if(totalMin >= 10){
+        var count = 1 + Math.floor(Math.random() * 3);
+        var points = [];
+        var tries = 0;
+        while(points.length < count && tries < 30){
+          tries++;
+          var t = 3 + Math.random() * (totalMin - 5);
+          if(points.every(function(p){ return Math.abs(p - t) >= 5; })){
+            points.push(t);
+          }
+        }
+        points.sort(function(a,b){ return a-b; });
+        var first = points[0];
+        if(typeof first === 'number'){
+          focusTimer = setTimeout(function(){
+            if(!PV.data) pvShowPopup();
+          }, first * 60 * 1000);
+        }
+      }
+    }
+
+    if(!focusing && lastFocusState){
+      if(focusTimer){ clearTimeout(focusTimer); focusTimer = null; }
+    }
+
+    lastFocusState = focusing;
+  }catch(e){}
+}
+
+/* ---------- 启动 ---------- */
+function boot(){
+  /* 第一次绑按钮（弹框可能还没渲染，先绑，之后每 1 秒检查一次） */
+  bindClose();
+  setInterval(bindClose, 1000);
+
+  /* 监听弹框显示 */
+  try{
+    var mo = new MutationObserver(function(muts){
+      muts.forEach(function(m){
+        if(m.type === 'attributes' && m.attributeName === 'class'){
+          var el = m.target;
+          if(el.id === 'pomoVisitPopup' && el.classList.contains('show')){
+            bindClose();
+          }
+        }
+      });
+    });
+    var popup = getPopup();
+    if(popup) mo.observe(popup, { attributes: true });
+  }catch(e){}
+
+  /* 专注状态监听 */
+  setInterval(checkFocusState, 2000);
+
+  console.log('[路过弹框 v2] 已加载。');
+}
+
+if(document.readyState === 'loading'){
+  document.addEventListener('DOMContentLoaded', function(){ setTimeout(boot, 500); });
+} else {
+  setTimeout(boot, 500);
+}
+})();
+</script>
+
+function owLayoutTree(w, persons){
+  const NODE_W = 108, NODE_H = 96, SIB_GAP = 28, ROW_GAP = 64, PAD_X = 40, PAD_TOP = 40;
+
+  function parentsOf(p){
+    return (p.relations||[]).filter(r => r.type==='parent').map(r => persons.find(x => x.id===r.targetId)).filter(Boolean);
+  }
+  function spousesOf(p){
+    return (p.relations||[]).filter(r => r.type==='spouse').map(r => ({order:r.order||1, person: persons.find(x => x.id===r.targetId)})).filter(x=>x.person).sort((a,b)=>a.order-b.order);
+  }
+  function exSpousesOf(p){
+    return (p.relations||[]).filter(r => r.type==='ex-spouse').map(r => ({order:r.order||1, person: persons.find(x => x.id===r.targetId)})).filter(x=>x.person).sort((a,b)=>a.order-b.order);
+  }
+
+  /* 1. 算层：允许降级，取最小层 */
+  const level = {};
+  const roots = persons.filter(p => parentsOf(p).length === 0);
+  function setLevel(p, lv){
+    if(level[p.id] !== undefined && level[p.id] <= lv) return;
+    level[p.id] = lv;
+    (p.relations||[]).filter(r => r.type==='child').forEach(r => {
+      const c = persons.find(x => x.id === r.targetId);
+      if(c) setLevel(c, lv+1);
+    });
+  }
+  roots.forEach(r => setLevel(r, 0));
+  persons.forEach(p => { if(level[p.id] === undefined) level[p.id] = 0; });
+
+  /* 2. 按层分组，每个人只归到一层 */
+  const levels = {};
+  const placedLevel = {};
+  persons.forEach(p => {
+    const lv = level[p.id] || 0;
+    if(placedLevel[p.id] === undefined){
+      placedLevel[p.id] = lv;
+      if(!levels[lv]) levels[lv] = [];
+      levels[lv].push(p);
+    }
+  });
+
+  const nodes = [];
+  const edges = [];
+  const unitPos = {};
+  const sortedLvs = Object.keys(levels).map(Number).sort((a,b)=>a-b);
+  let maxRight = 0;
+
+  /* 3. 每层内：按 unit 排，unit 里排除已经在别层画过的人 */
+  const placedAll = new Set();   /* 全局已画 */
+  sortedLvs.forEach((lv, rowIdx) => {
+    const list = levels[lv];
+    const used = new Set();
+    const units = [];
+    list.forEach(p => {
+      if(used.has(p.id)) return;
+      if(placedAll.has(p.id)) return;   /* 已在别层画过 */
+      const parts = [];
+      exSpousesOf(p).forEach(x => {
+        if(used.has(x.person.id)) return;
+        if(placedAll.has(x.person.id)) return;
+        used.add(x.person.id);
+        parts.push({ kind:'ex', person:x.person, order:x.order });
+      });
+      parts.push({ kind:'self', person:p });
+      used.add(p.id);
+      spousesOf(p).forEach(x => {
+        if(used.has(x.person.id)) return;
+        if(placedAll.has(x.person.id)) return;
+        used.add(x.person.id);
+        parts.push({ kind:'spouse', person:x.person, order:x.order });
+      });
+      units.push({ parts });
+    });
+
+    /* 标记已画 */
+    units.forEach(u => {
+      u.parts.forEach(part => { placedAll.add(part.person.id); });
+    });
+
+    let totalW = 0;
+    units.forEach(u => {
+      u.w = u.parts.length * NODE_W + (u.parts.length - 1) * 4;
+      totalW += u.w;
+    });
+    totalW += (units.length - 1) * SIB_GAP;
+    let cursorX = PAD_X;
+    const y = PAD_TOP + rowIdx * (NODE_H + ROW_GAP);
+    units.forEach(u => {
+      const startX = cursorX;
+      u.parts.forEach((part, pi) => {
+        const x = startX + pi * (NODE_W + 4);
+        nodes.push({ person: part.person, x: x, y: y, kind: part.kind, order: part.order||0 });
+        unitPos[part.person.id] = { x: x, y: y, w: NODE_W, h: NODE_H };
+      });
+      const selfPart = u.parts.find(p => p.kind === 'self');
+      if(selfPart){
+        const sp = u.parts.indexOf(selfPart);
+        unitPos[selfPart.person.id].centerX = startX + sp * (NODE_W + 4) + NODE_W/2;
+      }
+      cursorX = startX + u.w + SIB_GAP;
+    });
+    if(cursorX - SIB_GAP > maxRight) maxRight = cursorX - SIB_GAP;
+  });
+
+  /* 4. 画线：子 → 父母，按父母的中心出发 */
+  persons.forEach(child => {
+    const parents = (child.relations||[]).filter(r => r.type==='parent').map(r => persons.find(x => x.id===r.targetId)).filter(Boolean);
+    if(!parents.length) return;
+    const cpos = unitPos[child.id];
+    if(!cpos) return;
+    const childCX = cpos.x + NODE_W/2;
+    const childTopY = cpos.y;
+    const isEx = parents.length === 2 && parents.some(a => parents.some(b => a.id !== b.id && (a.relations||[]).some(r => r.type==='ex-spouse' && r.targetId === b.id)));
+    const parentUnits = [];
+    parents.forEach(par => {
+      const ppos = unitPos[par.id];
+      if(!ppos) return;
+      const cx = ppos.centerX !== undefined ? ppos.centerX : (ppos.x + NODE_W/2);
+      parentUnits.push({ cx: cx, y: ppos.y + NODE_H });
+    });
+    const seen = new Set();
+    parentUnits.forEach(pu => {
+      const key = pu.cx + '_' + pu.y;
+      if(seen.has(key)) return;
+      seen.add(key);
+      edges.push({
+        fromX: pu.cx, fromY: pu.y,
+        toX: childCX, toY: childTopY,
+        color: isEx ? '#b8a392' : '#dacbbc'
+      });
+    });
+  });
+
+  const width = Math.max(maxRight + PAD_X, 400);
+  const height = PAD_TOP + sortedLvs.length * (NODE_H + ROW_GAP) + PAD_X;
+  return { nodes, edges, width, height };
+}
+
+<!-- ============================================================
+     族谱 · 手动调整补丁 v1
+     作用：
+     1. 卡片可拖动，位置保存到 world.familyTree.manualPos
+     2. 可手动指定某人所在行（覆盖自动算的层）
+     3. 可调整配偶顺序（order）
+     4. 一键清空手动位置，回到自动布局
+     ============================================================ -->
+<style>
+.ow-tree-card{ transition: box-shadow .12s, transform .12s; }
+.ow-tree-card:hover{ box-shadow: 0 6px 16px -6px rgba(90,70,50,.3); }
+.ow-tree-card.dragging{ opacity:.6; cursor:grabbing; z-index:10; }
+.ow-tree-card.manual-pos::after{
+  content:'✎';
+  position:absolute; top:.15rem; right:.2rem;
+  font-size:.55rem; color:#b8862b; opacity:.8;
+}
+.ow-edit-panel{
+  position:fixed; right:1.2rem; top:1.2rem;
+  width:320px; max-height:calc(100vh - 2.4rem);
+  background:#fffcf9; border:1px solid #ede3d8; border-radius:16px;
+  box-shadow:0 16px 40px -12px rgba(60,45,30,.35);
+  z-index:2300; display:none; flex-direction:column;
+  overflow:hidden;
+}
+.ow-edit-panel.show{ display:flex; }
+.ow-edit-panel .oep-head{
+  display:flex; align-items:center; gap:.5rem;
+  padding:.7rem .9rem; border-bottom:1px solid #ede3d8;
+  background:#faf5ef; flex-shrink:0;
+}
+.ow-edit-panel .oep-head h3{
+  font-size:.9rem; font-weight:700; color:#4f3e2e; margin:0; flex:1;
+}
+.ow-edit-panel .oep-head button{
+  background:#fffcf9; border:1px solid #dacbbc; border-radius:16px;
+  font-size:.72rem; padding:.25rem .65rem; cursor:pointer; color:#6b4f37;
+}
+.ow-edit-panel .oep-body{
+  flex:1; overflow-y:auto; padding:.8rem .9rem;
+}
+.ow-edit-panel .oep-section{
+  margin-bottom:1rem; padding-bottom:.8rem; border-bottom:1px dashed #ede3d8;
+}
+.ow-edit-panel .oep-section:last-child{ border-bottom:none; }
+.ow-edit-panel .oep-label{
+  font-size:.78rem; font-weight:700; color:#8b6b4b;
+  margin-bottom:.4rem; letter-spacing:.04em;
+}
+.ow-edit-panel .oep-person{
+  background:#faf5ef; border:1px solid #e6d9cd; border-radius:10px;
+  padding:.45rem .65rem; margin-bottom:.35rem;
+  display:flex; align-items:center; gap:.5rem; font-size:.82rem;
+}
+.ow-edit-panel .oep-person .name{
+  flex:1; min-width:0; font-weight:600; color:#4f3e2e;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+}
+.ow-edit-panel .oep-person input[type=number]{
+  width:48px; padding:.25rem .4rem; border-radius:6px;
+  border:1px solid #dacbbc; background:#fffcf9;
+  font-size:.8rem; text-align:center; outline:none;
+}
+.ow-edit-panel .oep-person select{
+  padding:.25rem .4rem; border-radius:6px; border:1px solid #dacbbc;
+  background:#fffcf9; font-size:.78rem; outline:none;
+}
+.ow-edit-panel .oep-empty{
+  font-size:.8rem; color:#b8a392; text-align:center; padding:1rem 0;
+}
+.ow-edit-toggle{
+  position:absolute; left:.8rem; bottom:.8rem;
+  width:38px; height:38px; border-radius:50%;
+  background:#fffcf9; border:1px solid #dacbbc; color:#6b4f37;
+  font-size:1.1rem; cursor:pointer; z-index:2299;
+  box-shadow:0 4px 12px -4px rgba(60,45,30,.3);
+}
+.ow-edit-toggle:hover{ background:#faf5ef; }
+</style>
+
+<script>
+(function(){
+'use strict';
+
+/* ---------- 工具 ---------- */
+function wEsc(s){
+  if(s === null || s === undefined) return '';
+  return String(s).replace(/[&<>"']/g, function(m){
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m];
+  });
+}
+function wToast(msg){
+  try{ if(typeof showToast === 'function'){ showToast(msg); return; } }catch(e){}
+  try{ if(typeof showSpaceToast === 'function'){ showSpaceToast(msg); return; } }catch(e){}
+}
+function wCurrentWorld(){
+  try{
+    if(typeof worlds === 'undefined' || typeof currentDetailWorldId === 'undefined') return null;
+    return worlds.find(function(w){ return w.id === currentDetailWorldId; }) || null;
+  }catch(e){ return null; }
+}
+function wSave(){
+  try{ saveJSON(SK_KUAI.WORLDS, worlds); }catch(e){}
+}
+
+/* ---------- 确保 familyTree.manualPos 存在 ---------- */
+function ensureManualPos(w){
+  if(!w.familyTree) w.familyTree = {};
+  if(!w.familyTree.manualPos || typeof w.familyTree.manualPos !== 'object'){
+    w.familyTree.manualPos = {};
+  }
+  return w.familyTree.manualPos;
+}
+
+/* ---------- 拖动：只对当前 family 里的 .ow-tree-card 生效 ---------- */
+var dragState = { card:null, startX:0, startY:0, origLeft:0, origTop:0, moved:false };
+
+function bindDrag(){
+  var stage = document.getElementById('ow-tree-inner');
+  if(!stage) return;
+  stage.querySelectorAll('.ow-tree-card').forEach(function(card){
+    if(card.__wDragBound) return;
+    card.__wDragBound = true;
+
+    card.addEventListener('mousedown', function(e){
+      /* 不拦右键 */
+      if(e.button !== 0) return;
+      /* 不拦卡片内部的按钮/输入 */
+      if(e.target.closest('button, input, select, a')) return;
+
+      var left = parseFloat(card.style.left) || 0;
+      var top = parseFloat(card.style.top) || 0;
+      dragState.card = card;
+      dragState.startX = e.clientX;
+      dragState.startY = e.clientY;
+      dragState.origLeft = left;
+      dragState.origTop = top;
+      dragState.moved = false;
+      card.classList.add('dragging');
+      e.preventDefault();
+    });
+
+    /* 单击 vs 拖动：拖动 > 4px 才动，否则算点击 */
+    card.addEventListener('click', function(e){
+      if(card.__justDragged){
+        e.preventDefault();
+        e.stopPropagation();
+        card.__justDragged = false;
+        return;
+      }
+    }, true);
+  });
+}
+
+document.addEventListener('mousemove', function(e){
+  if(!dragState.card) return;
+  var dx = e.clientX - dragState.startX;
+  var dy = e.clientY - dragState.startY;
+  if(!dragState.moved && Math.sqrt(dx*dx + dy*dy) > 4){
+    dragState.moved = true;
+  }
+  if(!dragState.moved) return;
+  var c = dragState.card;
+  c.style.left = (dragState.origLeft + dx) + 'px';
+  c.style.top = (dragState.origTop + dy) + 'px';
+});
+
+document.addEventListener('mouseup', function(e){
+  if(!dragState.card) return;
+  var card = dragState.card;
+  card.classList.remove('dragging');
+  if(dragState.moved){
+    card.__justDragged = true;
+    saveCardPosition(card);
+    setTimeout(function(){ card.__justDragged = false; }, 50);
+  }
+  dragState.card = null;
+});
+
+function saveCardPosition(card){
+  var w = wCurrentWorld();
+  if(!w) return;
+  /* 从 onclick 里解析 person id */
+  var oc = card.getAttribute('onclick') || '';
+  var m = oc.match(/owOpenPersonDetail\(['"]([^'"]+)['"]\)/);
+  if(!m) return;
+  var pid = m[1];
+  var mp = ensureManualPos(w);
+  mp[pid] = {
+    left: parseFloat(card.style.left) || 0,
+    top: parseFloat(card.style.top) || 0
+  };
+  wSave();
+  card.classList.add('manual-pos');
+}
+
+/* ---------- 读 manualPos，应用在渲染后 ---------- */
+function applyManualPos(){
+  var w = wCurrentWorld();
+  if(!w) return;
+  var mp = ensureManualPos(w);
+  var stage = document.getElementById('ow-tree-inner');
+  if(!stage) return;
+  stage.querySelectorAll('.ow-tree-card').forEach(function(card){
+    var oc = card.getAttribute('onclick') || '';
+    var m = oc.match(/owOpenPersonDetail\(['"]([^'"]+)['"]\)/);
+    if(!m) return;
+    var pid = m[1];
+    if(mp[pid]){
+      card.style.left = mp[pid].left + 'px';
+      card.style.top = mp[pid].top + 'px';
+      card.classList.add('manual-pos');
+    }
+  });
+}
+
+/* ---------- 手动指定行：覆盖自动层 ---------- */
+function setPersonRow(pid, row){
+  var w = wCurrentWorld();
+  if(!w) return;
+  if(!w.familyTree.manualRow) w.familyTree.manualRow = {};
+  if(row === null || row === '' || isNaN(row)){
+    delete w.familyTree.manualRow[pid];
+  } else {
+    w.familyTree.manualRow[pid] = Math.max(0, parseInt(row) || 0);
+  }
+  wSave();
+}
+
+function getPersonRow(pid){
+  var w = wCurrentWorld();
+  if(!w) return null;
+  if(w.familyTree.manualRow && w.familyTree.manualRow[pid] !== undefined){
+    return w.familyTree.manualRow[pid];
+  }
+  return null;
+}
+
+/* ---------- 调整配偶顺序 ---------- */
+function setSpouseOrder(pid, targetId, type, order){
+  var w = wCurrentWorld();
+  if(!w) return;
+  var p = (w.familyTree.persons || []).find(function(x){ return x.id === pid; });
+  if(!p) return;
+  (p.relations || []).forEach(function(r){
+    if(r.targetId === targetId && r.type === type){
+      r.order = Math.max(1, parseInt(order) || 1);
+    }
+  });
+  /* 对方也同步 */
+  var t = (w.familyTree.persons || []).find(function(x){ return x.id === targetId; });
+  if(t){
+    (t.relations || []).forEach(function(r){
+      if(r.targetId === pid && r.type === type){
+        r.order = Math.max(1, parseInt(order) || 1);
+      }
+    });
+  }
+  wSave();
+}
+
+/* ---------- 打开编辑面板 ---------- */
+function openEditPanel(){
+  var panel = document.getElementById('owEditPanel');
+  if(!panel) return;
+  renderPanel();
+  panel.classList.add('show');
+}
+function closeEditPanel(){
+  var panel = document.getElementById('owEditPanel');
+  if(panel) panel.classList.remove('show');
+}
+
+function renderPanel(){
+  var panel = document.getElementById('owEditPanel');
+  if(!panel) return;
+  var w = wCurrentWorld();
+  if(!w){ panel.classList.remove('show'); return; }
+
+  var famId = '';
+  try{
+    /* 从 family tab 的 active 按钮拿 family id */
+    var activeBtn = document.querySelector('.ow-fam-btn.active');
+    if(activeBtn){
+      var oc = activeBtn.getAttribute('onclick') || '';
+      var m = oc.match(/owSwitchFamily\(['"]([^'"]+)['"]\)/);
+      if(m) famId = m[1];
+    }
+    if(!famId && w.familyTree.families && w.familyTree.families[0]){
+      famId = w.familyTree.families[0].id;
+    }
+  }catch(e){}
+
+  var persons = (w.familyTree.persons || []).filter(function(p){
+    return (p.familyIds || []).indexOf(famId) >= 0;
+  });
+
+  var mp = ensureManualPos(w);
+  var mr = w.familyTree.manualRow || {};
+
+  var html = '';
+  html += '<div class="oep-head">';
+  html += '<h3>🌳 族谱调整</h3>';
+  html += '<button onclick="__owEditPanelClose()">✕</button>';
+  html += '</div>';
+  html += '<div class="oep-body">';
+
+  /* 手动行 */
+  html += '<div class="oep-section">';
+  html += '<div class="oep-label">手动指定所在行（0 = 第一行）</div>';
+  if(!persons.length){
+    html += '<div class="oep-empty">这个家族还没有人。</div>';
+  } else {
+    persons.forEach(function(p){
+      var autoRow = '';
+      var manual = mr[p.id];
+      html += '<div class="oep-person">';
+      html += '<span class="name" title="' + wEsc(p.name) + '">' + wEsc(p.name) + '</span>';
+      html += '<input type="number" min="0" placeholder="自动" value="' + (manual !== undefined ? manual : '') + '" onchange="__owSetRow(\'' + p.id + '\', this.value)">';
+      html += '</div>';
+    });
+  }
+  html += '</div>';
+
+  /* 配偶顺序 */
+  html += '<div class="oep-section">';
+  html += '<div class="oep-label">配偶 / 前任顺序</div>';
+  var spouseRows = [];
+  persons.forEach(function(p){
+    (p.relations || []).forEach(function(r){
+      if(r.type !== 'spouse' && r.type !== 'ex-spouse') return;
+      var t = (w.familyTree.persons || []).find(function(x){ return x.id === r.targetId; });
+      if(!t) return;
+      /* 只在当前 family 里 */
+      if((t.familyIds || []).indexOf(famId) < 0) return;
+      spouseRows.push({ pid: p.id, tid: t.id, pname: p.name, tname: t.name, type: r.type, order: r.order || 1 });
+    });
+  });
+  if(!spouseRows.length){
+    html += '<div class="oep-empty">没有配偶 / 前任关系。</div>';
+  } else {
+    spouseRows.forEach(function(row){
+      html += '<div class="oep-person">';
+      html += '<span class="name" title="' + wEsc(row.pname) + ' → ' + wEsc(row.tname) + '">';
+      html += wEsc(row.pname) + ' → ' + wEsc(row.tname) + '（' + (row.type === 'spouse' ? '配偶' : '前夫/前妻') + '）';
+      html += '</span>';
+      html += '<input type="number" min="1" value="' + row.order + '" onchange="__owSetSpouseOrder(\'' + row.pid + '\',\'' + row.tid + '\',\'' + row.type + '\', this.value)">';
+      html += '</div>';
+    });
+  }
+  html += '</div>';
+
+  /* 操作 */
+  html += '<div class="oep-section">';
+  html += '<div class="oep-label">操作</div>';
+  html += '<div style="display:flex;gap:.4rem;flex-wrap:wrap;">';
+  html += '<button onclick="__owClearManual()" style="padding:.35rem .8rem;border-radius:20px;border:1px solid #dacbbc;background:#fffcf9;color:#6b4f37;font-size:.78rem;cursor:pointer;">🗑 清空手动位置</button>';
+  html += '<button onclick="__owReRender()" style="padding:.35rem .8rem;border-radius:20px;border:1px solid #dacbbc;background:#fffcf9;color:#6b4f37;font-size:.78rem;cursor:pointer;">🔄 重排</button>';
+  html += '</div>';
+  html += '</div>';
+
+  html += '</div>';
+  panel.innerHTML = html;
+}
+
+/* ---------- 全局挂载 ---------- */
+window.__owSetRow = function(pid, val){
+  setPersonRow(pid, val);
+  wToast(val === '' ? '已恢复自动行' : '已指定第 ' + val + ' 行');
+  __owReRender();
+};
+
+window.__owSetSpouseOrder = function(pid, tid, type, val){
+  setSpouseOrder(pid, tid, type, val);
+  wToast('顺序已更新');
+  __owReRender();
+};
+
+window.__owClearManual = function(){
+  var w = wCurrentWorld();
+  if(!w) return;
+  if(!confirm('清空所有手动位置和手动行？')) return;
+  w.familyTree.manualPos = {};
+  w.familyTree.manualRow = {};
+  wSave();
+  wToast('已清空');
+  __owReRender();
+};
+
+window.__owReRender = function(){
+  var w = wCurrentWorld();
+  if(!w) return;
+  try{ if(typeof owRender === 'function') owRender(w); }catch(e){}
+  /* 如果当前不在 family tab，切过去 */
+  try{
+    var familyTabBtn = document.querySelector('[data-owtab="family"]');
+    if(familyTabBtn && !document.getElementById('ow-panel-family').classList.contains('active')){
+      familyTabBtn.click();
+    }
+  }catch(e){}
+  setTimeout(function(){
+    bindDrag();
+    applyManualPos();
+    renderPanel();
+  }, 100);
+};
+
+window.__owEditPanelOpen = function(){
+  if(document.getElementById('owEditPanel')){ openEditPanel(); return; }
+  var panel = document.createElement('div');
+  panel.className = 'ow-edit-panel';
+  panel.id = 'owEditPanel';
+  document.body.appendChild(panel);
+
+  var toggle = document.createElement('button');
+  toggle.className = 'ow-edit-toggle';
+  toggle.id = 'owEditToggle';
+  toggle.title = '族谱调整';
+  toggle.textContent = '✎';
+  toggle.onclick = function(){ openEditPanel(); };
+  document.body.appendChild(toggle);
+
+  renderPanel();
+  panel.classList.add('show');
+};
+
+window.__owEditPanelClose = function(){
+  closeEditPanel();
+};
+
+/* ---------- 渲染后钩子：每次族谱重渲染，都重新绑拖动 + 应用坐标 ---------- */
+function hookRender(){
+  if(typeof window.owRenderTree !== 'function') return;
+  if(window.owRenderTree.__wEditHooked) return;
+  var orig = window.owRenderTree;
+  window.owRenderTree = function(w){
+    var r = orig.apply(this, arguments);
+    setTimeout(function(){
+      bindDrag();
+      applyManualPos();
+    }, 30);
+    return r;
+  };
+  window.owRenderTree.__wEditHooked = true;
+}
+
+/* ---------- 启动 ---------- */
+function boot(){
+  /* 只在 family tab 显示"✎"按钮 */
+  var observer = new MutationObserver(function(){
+    var familyActive = document.querySelector('#ow-panel-family.active') !== null;
+    var toggle = document.getElementById('owEditToggle');
+    if(familyActive){
+      if(!toggle){
+        toggle = document.createElement('button');
+        toggle.className = 'ow-edit-toggle';
+        toggle.id = 'owEditToggle';
+        toggle.title = '族谱调整';
+        toggle.textContent = '✎';
+        toggle.onclick = function(){ window.__owEditPanelOpen(); };
+        document.body.appendChild(toggle);
+      }
+      toggle.style.display = '';
+    } else if(toggle){
+      toggle.style.display = 'none';
+    }
+  });
+  observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
+
+  /* 第一次绑 */
+  hookRender();
+  bindDrag();
+  applyManualPos();
+
+  /* 每 1.5 秒检查一次，防止漏绑 */
+  setInterval(function(){
+    bindDrag();
+    applyManualPos();
+  }, 1500);
+
+  console.log('[族谱 · 手动调整 v1] 已加载。');
+}
+
+if(document.readyState === 'loading'){
+  document.addEventListener('DOMContentLoaded', function(){ setTimeout(boot, 800); });
+} else {
+  setTimeout(boot, 800);
+}
+})();
+</script>
+
+
 </body>
 </html>
