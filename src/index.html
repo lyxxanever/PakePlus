@@ -10503,6 +10503,7 @@ if(document.readyState === 'loading'){
 })();
 </script>
 
+<script>
 function owLayoutTree(w, persons){
   const NODE_W = 108, NODE_H = 96, SIB_GAP = 28, ROW_GAP = 64, PAD_X = 40, PAD_TOP = 40;
 
@@ -10638,6 +10639,7 @@ function owLayoutTree(w, persons){
   const height = PAD_TOP + sortedLvs.length * (NODE_H + ROW_GAP) + PAD_X;
   return { nodes, edges, width, height };
 }
+</script>
 
 <!-- ============================================================
      族谱 · 手动调整补丁 v1
@@ -11130,6 +11132,1354 @@ if(document.readyState === 'loading'){
 })();
 </script>
 
+<!-- ============================================================
+     可攻略角色 · 形象照展示补丁 v5（完整显示 + 硬隔离不重合）
+     ============================================================ -->
+<style>
+/* ===== 角色详情弹窗：强制加宽，压过原 720px ===== */
+#kuaiModalContent.char-detail-modal{
+  max-width: 1000px !important;
+  width: 96vw !important;
+}
+
+/* ===== 左右布局：固定列宽，硬隔离 ===== */
+.char-detail-layout{
+  display:flex;
+  gap: 24px;
+  align-items: stretch;
+  width: 100%;
+}
+@media(max-width:860px){
+  .char-detail-layout{ flex-direction:column; }
+}
+
+/* ===== 左栏：固定宽度 + 3:4 + 内部绝对定位 ===== */
+.char-detail-left{
+  flex: 0 0 400px;
+  width: 400px;
+  aspect-ratio: 3 / 4;
+  position: relative;
+  background:#faf5ef;
+  border:1px solid #e6d9cd;
+  border-radius:14px;
+  box-sizing:border-box;
+  overflow:hidden;
+}
+.char-detail-left .cdl-inner{
+  position:absolute;
+  inset:0;
+  padding:1.1rem 1.2rem;
+  overflow-y:auto;
+  overflow-x:hidden;
+  box-sizing:border-box;
+  word-break:break-word;
+  scrollbar-width:thin;
+}
+.char-detail-left .cdl-inner::-webkit-scrollbar{ width:6px; }
+.char-detail-left .cdl-inner::-webkit-scrollbar-thumb{ background:#dacbbc; border-radius:3px; }
+
+/* ===== 关键修复 1：社会身份 / 与我的关系 完整显示，不省略 ===== */
+.char-detail-left .cdl-inner .cdl-role-line{
+  font-size:.85rem;
+  color:#a28e7a;
+  line-height:1.6;
+  white-space:normal;      /* 允许换行 */
+  word-break:break-word;   /* 长串也断行 */
+  overflow:visible;
+  text-overflow:clip;
+  margin-bottom:.2rem;
+}
+.char-detail-left .cdl-inner .cdl-name{
+  font-size:1.4rem;
+  font-weight:600;
+  color:#4f3e2e;
+  white-space:normal;
+  word-break:break-word;
+  line-height:1.4;
+}
+@media(max-width:860px){
+  .char-detail-left{
+    flex:none;
+    width:100%;
+    aspect-ratio:auto;
+  }
+  .char-detail-left .cdl-inner{
+    position:static;
+    overflow:visible;
+  }
+}
+
+/* ===== 关键修复 2：右栏图和左栏硬隔离 ===== */
+.char-detail-right{
+  flex:1 1 auto;
+  min-width:0;
+  max-width:calc(100% - 424px);   /* 400 + gap 24，右栏绝不越过左栏 */
+  display:flex;
+  flex-direction:column;
+}
+@media(max-width:860px){
+  .char-detail-right{ max-width:100%; }
+}
+
+/* ===== 形象照查看器 ===== */
+.char-photo-viewer{
+  display:flex;
+  flex-direction:column;
+  gap:.6rem;
+  width:100%;
+}
+.cpv-main{
+  position:relative;
+  width:100%;
+  aspect-ratio:3 / 4;
+  background:#faf5ef;
+  border-radius:14px;
+  border:1px solid #e6d9cd;
+  overflow:hidden;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
+.cpv-img{
+  width:100%;height:100%;
+  object-fit:cover;display:block;cursor:zoom-in;
+}
+.cpv-nav{
+  position:absolute;top:50%;transform:translateY(-50%);
+  width:36px;height:36px;border-radius:50%;
+  background:rgba(255,252,249,.9);border:1px solid #dacbbc;
+  color:#6b4f37;font-size:1.4rem;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  z-index:2;line-height:1;padding:0;
+}
+.cpv-nav:hover{ background:#fff; }
+.cpv-nav.prev{ left:.5rem; }
+.cpv-nav.next{ right:.5rem; }
+.cpv-counter{ text-align:center;font-size:.8rem;color:#a28e7a; }
+.cpv-thumbs{ display:flex;gap:.4rem;flex-wrap:wrap;justify-content:center; }
+.cpv-thumb{
+  width:52px;height:69px;border-radius:8px;object-fit:cover;
+  border:2px solid transparent;cursor:pointer;opacity:.6;transition:all .15s;
+}
+.cpv-thumb:hover{ opacity:1; }
+.cpv-thumb.active{ border-color:#8b6b4b;opacity:1; }
+
+/* ===== 无图占位 ===== */
+.char-photo-empty{
+  width:100%;aspect-ratio:3 / 4;
+  background:#faf5ef;border:2px dashed #dacbbc;border-radius:14px;
+  padding:2.5rem 1rem;text-align:center;color:#b8a392;font-size:.88rem;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:.5rem;box-sizing:border-box;
+}
+.char-photo-empty .big{ font-size:2.6rem;line-height:1; }
+
+/* ===== 编辑弹窗照片管理 ===== */
+.char-photo-manager{
+  display:flex;gap:.6rem;flex-wrap:wrap;margin-top:.4rem;padding:.6rem;
+  background:#faf5ef;border-radius:12px;border:1px solid #e6d9cd;min-height:60px;
+}
+.char-photo-manager .cpm-item{
+  position:relative;width:72px;height:96px;border-radius:10px;overflow:hidden;
+  border:1px solid #dacbbc;background:#fffcf9;
+}
+.char-photo-manager .cpm-item img{ width:100%;height:100%;object-fit:cover; }
+.char-photo-manager .cpm-del{
+  position:absolute;top:2px;right:2px;background:rgba(0,0,0,.55);color:#fff;
+  border:none;border-radius:50%;width:18px;height:18px;font-size:.65rem;
+  cursor:pointer;line-height:1;padding:0;
+}
+.char-photo-manager .cpm-empty{ font-size:.8rem;color:#b8a392;padding:.4rem; }
+</style>
+
+<script>
+(function(){
+'use strict';
+
+let currentPhotoIndex = 0;
+
+/* ============================================================
+   覆盖 showCharDetail
+   ============================================================ */
+function patchShowCharDetail(){
+  if(typeof window.showCharDetail !== 'function') return;
+  if(window.showCharDetail.__photoPatchedV5) return;
+
+  window.showCharDetail = function(wid, index){
+    const w = worlds.find(x => x.id === wid);
+    if(!w || !w.characters || !w.characters[index]) return;
+    const ch = w.characters[index];
+    const isA = w.anchor === ch.name;
+    const isR = isRomanceable(ch);
+    const isS = ch.starred;
+    const cc = collections.filter(c => c.char === ch.name).length;
+    const emoji = getCharEmojiForMeet(ch);
+    const aff = getCharAffinity(ch.name);
+    const convKey = `char_${wid}_${ch.name}`;
+    const hasConv = conversations.find(c => c.id === convKey);
+
+    const photos = Array.isArray(ch.photoIds) ? ch.photoIds : [];
+    currentPhotoIndex = 0;
+    let photoHtml = '';
+    if(photos.length){
+      photoHtml = `
+        <div class="char-photo-viewer">
+          <div class="cpv-main">
+            <button class="cpv-nav prev" onclick="event.stopPropagation();window.__switchCharPhoto('${wid}',${index},-1)" ${photos.length<=1?'style="display:none;"':''}>‹</button>
+            <img class="cpv-img" id="cpvMainImg" data-photoid="${photos[0]}" onclick="window.__viewCharPhoto('${wid}',${index},0)" alt="">
+            <button class="cpv-nav next" onclick="event.stopPropagation();window.__switchCharPhoto('${wid}',${index},1)" ${photos.length<=1?'style="display:none;"':''}>›</button>
+          </div>
+          <div class="cpv-counter" id="cpvCounter">1 / ${photos.length}</div>
+          <div class="cpv-thumbs">
+            ${photos.map((pid,i)=>`<img class="cpv-thumb ${i===0?'active':''}" data-photoid="${pid}" data-idx="${i}" onclick="event.stopPropagation();window.__jumpCharPhoto('${wid}',${index},${i})" alt="">`).join('')}
+          </div>
+        </div>`;
+    } else {
+      photoHtml = `<div class="char-photo-empty"><div class="big">🖼️</div><div>还没有形象照</div></div>`;
+    }
+
+    kuaiOpenModal(`
+<button class="modal-close" onclick="kuaiCloseModal()">✕</button>
+<div class="char-detail-layout">
+  <div class="char-detail-left">
+    <div class="cdl-inner">
+      <div style="display:flex;gap:.8rem;align-items:flex-start;margin-bottom:.8rem;">
+        <div class="avatar lg" ${ch.avatarId?`data-avatar-id="${ch.avatarId}"`:''}>${emoji}</div>
+        <div style="min-width:0;flex:1;">
+          ${(()=>{const r=ch.rarity||(isA?'SSR':'SR');return `<span class="rarity-badge ${r}" style="font-size:.72rem;margin-bottom:.3rem;display:inline-block;">${r}</span>`;})()}
+          <div class="cdl-name">${esc(ch.name)}${isS?' ⭐':''}</div>
+          <div class="cdl-role-line">${esc(ch.role||'')}${ch.relation?' · '+esc(ch.relation):''}</div>
+        </div>
+      </div>
+      ${isR?`<div class="char-label">💖 好感</div><div style="font-size:1.02rem;color:#a0588a;font-weight:600;">${formatFavor(ch)}</div>
+      <div class="char-label">💜 倾心</div><div style="font-size:1.02rem;color:#7a4a9a;font-weight:600;">${aff}</div>`:''}
+      ${ch.firstAppear?`<div class="char-label">🎬 首次出场</div><div style="font-size:.88rem;">${esc(ch.firstAppear)}</div>`:''}
+      <div class="char-label">表面</div><div style="font-size:.88rem;">${esc(ch.surface||'')}</div>
+      <div class="char-label">内心</div><div style="font-size:.88rem;">${esc(ch.inner||'')}</div>
+      <div class="char-quote" style="font-size:.82rem;">${esc(ch.quote||'')}</div>
+      <div class="char-label">详情</div><div style="font-size:.86rem;color:#4e4034;line-height:1.7;white-space:pre-wrap;">${esc(ch.detail||'')}</div>
+      <div class="char-label">📜 已收藏 ${cc} 段</div>
+      <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-top:1rem;">
+        ${isR?`<button class="btn btn-sm" onclick="kuaiCloseModal();startOrOpenCharConv('${wid}','${esc(ch.name)}')">💬 聊天${hasConv?'（有记录）':''}</button>`:''}
+        <button class="btn btn-sm btn-secondary" onclick="kuaiCloseModal();openCharacterEditModal('${wid}',${index})">✏️ 编辑</button>
+        ${!isA?`<button class="btn btn-sm btn-secondary" onclick="setAnchor('${wid}','${esc(ch.name)}')">⚓ 锚点</button>`:`<button class="btn btn-sm btn-secondary" onclick="unsetAnchor('${wid}')">取消锚点</button>`}
+      </div>
+    </div>
+  </div>
+  <div class="char-detail-right">${photoHtml}</div>
+</div>`);
+
+    setTimeout(function(){
+      const box = document.getElementById('kuaiModalContent');
+      if(box){
+        box.classList.add('char-detail-modal');
+        box.style.maxWidth = '1000px';
+        box.style.width = '96vw';
+      }
+      loadCharPhotos();
+    }, 0);
+
+    try{ loadAvatars(); }catch(e){}
+  };
+  window.showCharDetail.__photoPatchedV5 = true;
+}
+
+/* ============================================================
+   照片加载 / 切换 / 大图
+   ============================================================ */
+async function loadCharPhotos(){
+  document.querySelectorAll('[data-photoid]').forEach(async el => {
+    const id = el.dataset.photoid;
+    if(!id) return;
+    if(el.tagName === 'IMG' && el.src && el.src !== '' && !el.src.startsWith('data:')) return;
+    try{
+      const rec = await idbGet('images', id);
+      if(rec && rec.data && el.tagName === 'IMG') el.src = rec.data;
+    }catch(e){}
+  });
+}
+
+function getCharPhotos(wid, index){
+  const w = worlds.find(x => x.id === wid);
+  if(!w || !w.characters || !w.characters[index]) return [];
+  return Array.isArray(w.characters[index].photoIds) ? w.characters[index].photoIds : [];
+}
+
+async function switchCharPhoto(wid, index, dir){
+  const photos = getCharPhotos(wid, index);
+  if(photos.length <= 1) return;
+  currentPhotoIndex = (currentPhotoIndex + dir + photos.length) % photos.length;
+  await jumpCharPhoto(wid, index, currentPhotoIndex);
+}
+
+async function jumpCharPhoto(wid, index, i){
+  const photos = getCharPhotos(wid, index);
+  if(!photos[i]) return;
+  currentPhotoIndex = i;
+  const img = document.getElementById('cpvMainImg');
+  if(img){
+    try{
+      const rec = await idbGet('images', photos[i]);
+      if(rec && rec.data) img.src = rec.data;
+      img.dataset.photoid = photos[i];
+    }catch(e){}
+  }
+  const counter = document.getElementById('cpvCounter');
+  if(counter) counter.textContent = `${i+1} / ${photos.length}`;
+  document.querySelectorAll('.cpv-thumb').forEach((th, idx) => {
+    th.classList.toggle('active', idx === i);
+  });
+}
+
+async function viewCharPhoto(wid, index, i){
+  const photos = getCharPhotos(wid, index);
+  if(!photos[i]) return;
+  try{
+    const rec = await idbGet('images', photos[i]);
+    if(!rec || !rec.data) return;
+    kuaiOpenModal(`
+      <button class="modal-close" onclick="kuaiCloseModal()">✕</button>
+      <div style="text-align:center;">
+        <img src="${rec.data}" style="max-width:100%;max-height:80vh;border-radius:12px;">
+        <div style="margin-top:.6rem;font-size:.8rem;color:#a28e7a;">${i+1} / ${photos.length}</div>
+      </div>`);
+  }catch(e){}
+}
+
+window.__switchCharPhoto = switchCharPhoto;
+window.__jumpCharPhoto = jumpCharPhoto;
+window.__viewCharPhoto = viewCharPhoto;
+
+/* ============================================================
+   编辑弹窗：加"形象照管理"
+   ============================================================ */
+function patchCharacterEditModal(){
+  if(typeof window.openCharacterEditModal !== 'function') return;
+  if(window.openCharacterEditModal.__photoPatchedV5) return;
+
+  const orig = window.openCharacterEditModal;
+  window.openCharacterEditModal = function(worldId, index){
+    window.__charEditWorldId = worldId;
+    window.__charEditIndex = index;
+
+    orig(worldId, index);
+
+    setTimeout(function(){
+      const modal = document.getElementById('kuaiModalContent');
+      if(!modal) return;
+      modal.classList.remove('char-detail-modal');
+      modal.style.maxWidth = '';
+      modal.style.width = '';
+
+      if(modal.querySelector('#charPhotoManager')) return;
+
+      const w = worlds.find(x => x.id === worldId);
+      if(!w) return;
+      const isNew = index < 0;
+      const ch = isNew ? null : w.characters[index];
+      const initPhotos = ch && Array.isArray(ch.photoIds) ? [...ch.photoIds] : [];
+      window.__charPhotoDraft = initPhotos;
+
+      const detailArea = modal.querySelector('#chEditDetail');
+      if(!detailArea) return;
+
+      const wrap = document.createElement('div');
+      wrap.style.cssText = 'margin-top:.8rem;';
+      wrap.innerHTML =
+        '<div style="font-size:.82rem;color:#6b4f37;font-weight:600;margin-bottom:.4rem;">🖼️ 形象照（可多张，建议竖图 3:4）</div>' +
+        '<div class="char-photo-manager" id="charPhotoManager"></div>' +
+        '<div style="margin-top:.5rem;">' +
+          '<button type="button" class="btn-icon" onclick="document.getElementById(\'charPhotoInput\').click()">📷 上传照片</button>' +
+          '<input type="file" id="charPhotoInput" accept="image/*" multiple style="display:none" onchange="window.__uploadCharPhotos(event)">' +
+        '</div>';
+
+      detailArea.parentNode.insertBefore(wrap, detailArea.nextSibling);
+      renderCharPhotoManager(window.__charPhotoDraft);
+
+      if(isNew){
+        const hint = document.createElement('div');
+        hint.style.cssText = 'font-size:.75rem;color:#a28e7a;margin-top:.3rem;';
+        hint.textContent = '提示：新建角色请先保存，再上传照片。';
+        wrap.appendChild(hint);
+      }
+    }, 40);
+  };
+  window.openCharacterEditModal.__photoPatchedV5 = true;
+}
+
+function renderCharPhotoManager(photoIds){
+  const el = document.getElementById('charPhotoManager');
+  if(!el) return;
+  if(!photoIds || !photoIds.length){
+    el.innerHTML = '<div class="cpm-empty">还没有照片</div>';
+    return;
+  }
+  el.innerHTML = photoIds.map((pid, i) =>
+    '<div class="cpm-item" data-manager-photo="' + pid + '">' +
+      '<img data-photoid="' + pid + '" alt="">' +
+      '<button type="button" class="cpm-del" onclick="window.__removeCharPhoto(' + i + ')">✕</button>' +
+    '</div>'
+  ).join('');
+  el.querySelectorAll('img[data-photoid]').forEach(async img => {
+    try{
+      const rec = await idbGet('images', img.dataset.photoid);
+      if(rec && rec.data) img.src = rec.data;
+    }catch(e){}
+  });
+}
+
+async function uploadCharPhotos(event){
+  const files = Array.from(event.target.files || []);
+  if(!files.length) return;
+
+  if(window.__charEditIndex < 0){
+    showToast('请先保存角色，再上传照片');
+    event.target.value = '';
+    return;
+  }
+
+  const w = worlds.find(x => x.id === window.__charEditWorldId);
+  if(!w) return;
+  const ch = w.characters[window.__charEditIndex];
+  if(!ch){ showToast('角色不存在，请重新打开'); return; }
+
+  if(!window.__charPhotoDraft) window.__charPhotoDraft = [...(ch.photoIds || [])];
+
+  for(const f of files){
+    try{
+      const d = await fileToDataURL(f);
+      const id = uid();
+      await idbPut('images', { id: id, data: d, name: f.name });
+      window.__charPhotoDraft.push(id);
+    }catch(e){ showToast('上传失败'); }
+  }
+  renderCharPhotoManager(window.__charPhotoDraft);
+  event.target.value = '';
+}
+
+async function removeCharPhoto(i){
+  const draft = window.__charPhotoDraft || [];
+  if(!draft[i]) return;
+  const ok = window.uiConfirm
+    ? await window.uiConfirm('删除这张照片？', { danger: true, okText: '删除' })
+    : confirm('删除这张照片？');
+  if(!ok) return;
+  const removed = draft.splice(i, 1)[0];
+  try{ await idbDel('images', removed); }catch(e){}
+  renderCharPhotoManager(draft);
+}
+
+window.__uploadCharPhotos = uploadCharPhotos;
+window.__removeCharPhoto = removeCharPhoto;
+
+/* ============================================================
+   保存角色时写 photoIds
+   ============================================================ */
+function patchSaveCharacter(){
+  if(typeof window.saveCharacterFromModal !== 'function') return;
+  if(window.saveCharacterFromModal.__photoPatchedV5) return;
+
+  const orig = window.saveCharacterFromModal;
+  window.saveCharacterFromModal = function(worldId, index){
+    orig(worldId, index);
+
+    setTimeout(function(){
+      const w = worlds.find(x => x.id === worldId);
+      if(!w || !w.characters) return;
+      let ch = null;
+      if(index >= 0) ch = w.characters[index];
+      else ch = w.characters[w.characters.length - 1];
+      if(!ch) return;
+      if(window.__charPhotoDraft && window.__charPhotoDraft.length){
+        ch.photoIds = [...window.__charPhotoDraft];
+      } else {
+        ch.photoIds = [];
+      }
+      saveJSON(SK_KUAI.WORLDS, worlds);
+    }, 60);
+  };
+  window.saveCharacterFromModal.__photoPatchedV5 = true;
+}
+
+/* ============================================================
+   自动清理裸露代码（保留）
+   ============================================================ */
+function cleanupLooseCode(){
+  const body = document.body;
+  if(!body) return;
+  const walker = document.createTreeWalker(body, NodeFilter.SHOW_TEXT, null);
+  const toHide = [];
+  let n;
+  while((n = walker.nextNode())){
+    const t = n.nodeValue || '';
+    if(t.length > 200
+       && /function\s+\w+\s*\(/.test(t)
+       && t.indexOf('{') >= 0
+       && t.indexOf('}') >= 0){
+      const parent = n.parentNode;
+      if(!parent) continue;
+      const tag = (parent.tagName || '').toLowerCase();
+      if(tag === 'script' || tag === 'style' || tag === 'pre' || tag === 'code') continue;
+      toHide.push(parent);
+    }
+  }
+  toHide.forEach(el => {
+    if(el && el.style){
+      el.style.display = 'none';
+      el.setAttribute('data-removed-loose-code','1');
+    }
+  });
+  if(toHide.length){
+    console.log('[清理裸露代码] 隐藏了 ' + toHide.length + ' 个代码文本块');
+  }
+}
+
+/* ============================================================
+   启动
+   ============================================================ */
+function boot(){
+  patchShowCharDetail();
+  patchCharacterEditModal();
+  patchSaveCharacter();
+  setTimeout(cleanupLooseCode, 300);
+  setTimeout(cleanupLooseCode, 2000);
+  console.log('[可攻略角色 · 形象照补丁 v5] 已加载。');
+}
+
+if(document.readyState === 'loading'){
+  document.addEventListener('DOMContentLoaded', function(){ setTimeout(boot, 1200); });
+} else {
+  setTimeout(boot, 1200);
+}
+})();
+</script>
+
+<!-- ============================================================
+     世界详情 · 导入更新 补丁 v2（默认分界线 = 世界建立时间）
+     入口：世界详情头部 → 📥 导入更新
+     逻辑：
+     1. 分界线：优先 lastImportAt，没有就用 createdAt
+     2. 弹窗显示分界线 + 生成增量 JSON 的指令（可复制）
+     3. 粘贴 JSON → 应用更新（只补空 / 按名去重追加，不覆盖，不改标题）
+     4. 成功后记录本次导入时间
+     ============================================================ -->
+<style>
+.iw-import-btn{
+  display:inline-flex;align-items:center;gap:.35rem;
+}
+.iw-import-modal .iw-section{
+  margin-bottom:1.1rem;
+}
+.iw-import-modal .iw-label{
+  font-size:.82rem;
+  color:#6b4f37;
+  font-weight:600;
+  margin-bottom:.4rem;
+  display:flex;
+  align-items:center;
+  gap:.5rem;
+  flex-wrap:wrap;
+}
+.iw-import-modal .iw-label .iw-tip{
+  font-size:.72rem;
+  color:#a28e7a;
+  font-weight:400;
+}
+.iw-import-modal .iw-lasttime{
+  background:#fdf8ed;
+  border:1px solid #e8d5a8;
+  border-radius:10px;
+  padding:.6rem .9rem;
+  font-size:.85rem;
+  color:#8a6d1b;
+  display:flex;
+  align-items:center;
+  gap:.5rem;
+  flex-wrap:wrap;
+}
+.iw-import-modal .iw-lasttime strong{
+  color:#5b4632;
+  font-weight:700;
+}
+.iw-import-modal .iw-lasttime .iw-time-tag{
+  font-size:.7rem;
+  padding:.1rem .5rem;
+  border-radius:20px;
+  background:#f0e8df;
+  color:#8b6b4b;
+  font-weight:600;
+}
+.iw-import-modal textarea{
+  width:100%;
+  padding:.8rem;
+  border-radius:10px;
+  border:1px solid #dacbbc;
+  background:#fffcf9;
+  font-family:monospace;
+  font-size:.78rem;
+  line-height:1.6;
+  resize:vertical;
+  outline:none;
+  color:#4e4034;
+  box-sizing:border-box;
+}
+.iw-import-modal textarea:focus{
+  border-color:#8b6b4b;
+}
+.iw-import-modal .iw-actions{
+  display:flex;
+  gap:.5rem;
+  flex-wrap:wrap;
+  margin-top:.7rem;
+}
+.iw-import-modal .iw-result{
+  margin-top:.9rem;
+  padding:.8rem 1rem;
+  border-radius:10px;
+  font-size:.85rem;
+  line-height:1.75;
+  display:none;
+  white-space:pre-wrap;
+}
+.iw-import-modal .iw-result.show{
+  display:block;
+}
+.iw-import-modal .iw-result.ok{
+  background:#eef7ee;
+  border:1px solid #b8d9b8;
+  color:#3d6b3d;
+}
+.iw-import-modal .iw-result.err{
+  background:#fdf0ee;
+  border:1px solid #f0c8c0;
+  color:#a05a52;
+}
+.iw-import-modal .iw-result.warn{
+  background:#fdf7e3;
+  border:1px solid #e8d5a8;
+  color:#8a6d1b;
+}
+</style>
+
+<script>
+(function(){
+'use strict';
+
+/* ============================================================
+   工具
+   ============================================================ */
+function iwEsc(s){
+  if(s === null || s === undefined) return '';
+  return String(s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+}
+function iwIsEmpty(v){
+  if(v === null || v === undefined) return true;
+  if(typeof v === 'string') return v.trim() === '';
+  if(Array.isArray(v)) return v.length === 0;
+  if(typeof v === 'object') return Object.keys(v).length === 0;
+  return false;
+}
+function iwFillIfEmpty(target, key, val){
+  if(iwIsEmpty(target[key]) && !iwIsEmpty(val)) target[key] = val;
+}
+function iwNowStr(){
+  return new Date().toLocaleString('zh-CN', { hour12: false });
+}
+function iwNowISO(){
+  return new Date().toISOString();
+}
+
+/* ============================================================
+   分界线：优先 lastImportAt，没有就用 createdAt
+   返回 { iso, label, display, isCreated }
+   ============================================================ */
+function iwGetBoundary(w){
+  if(w.lastImportAt){
+    return {
+      iso: w.lastImportAt,
+      label: '上次导入时间',
+      display: new Date(w.lastImportAt).toLocaleString('zh-CN', { hour12: false }),
+      isCreated: false
+    };
+  }
+  if(w.createdAt){
+    return {
+      iso: w.createdAt,
+      label: '世界建立时间',
+      display: new Date(w.createdAt).toLocaleString('zh-CN', { hour12: false }),
+      isCreated: true
+    };
+  }
+  /* 老数据连 createdAt 都没有，用当前时间兜底，只显示不写回 */
+  return {
+    iso: iwNowISO(),
+    label: '世界建立时间',
+    display: '(数据较老，未记录建立时间，按当前时间整理)',
+    isCreated: true
+  };
+}
+
+/* ============================================================
+   生成 JSON 指令
+   ============================================================ */
+function buildUpdatePrompt(w){
+  const title = w.title || '未命名世界';
+  const boundary = iwGetBoundary(w);
+
+  /* 已有内容清单 */
+  const existChars = (w.characters || []).map(c => c.name).filter(Boolean);
+  const existEvents = (w.events || []).map(e => e.title).filter(Boolean);
+  const existHighlights = (w.highlights || []).map(h => h.title).filter(Boolean);
+  const existChapters = (w.chapters || []).map(c => c.title).filter(Boolean);
+  const existTags = (w.tags || []).filter(Boolean);
+  const existSummary = iwIsEmpty(w.storySummary) ? '' : '（已有，不再重复生成）';
+  const existArchive = (w.archive && (w.archive.background || w.archive.rules || w.archive.endings))
+    ? '（已有，只补空块）' : '';
+  const existProtagonist = (w.protagonist && w.protagonist.name) ? '（已有，只补空字段）' : '';
+  const existWorldArchive = (typeof w.worldArchive === 'string' && w.worldArchive.trim())
+    ? '（已有，不再重复生成）' : '';
+
+  return `你是「织梦世界·增量更新助手」。
+
+我会给你一份原始正文（AI 会话记录 / 文档 / 素材）。
+请你只整理【分界线之后产生的新内容】，输出成严格 JSON，只输出纯 JSON，不要解释，不要代码块包裹。
+
+【世界】${title}
+
+【分界线】${boundary.label}：${boundary.display}
+含义：只整理这个时间点之后出现的内容。这个时间点之前的内容一律不碰，也不要在输出里重复。
+
+【核心规则 · 必须遵守】
+1. 只整理「分界线之后」出现的新内容。分界线之前的旧内容一律不碰。
+2. 已存在的内容不重复生成（下面会给出清单）。
+3. 已有内容只补空字段，不覆盖非空内容。
+4. 输出必须是纯 JSON，不要任何多余文字。
+5. 只输出本次新增/补充的部分，旧内容不要原样搬进来。
+6. 如果原文里没有明确的时间信息，就按上下文判断哪些是"新增"的；实在分不清时，宁可少输出，也不要重复已有内容。
+
+【已存在 · 角色】（这些角色如果原文里没有新信息，就不要出现在输出里）
+${existChars.length ? existChars.map(n => '- ' + n).join('\n') : '（暂无）'}
+
+【已存在 · 事件】（这些事件如果原文里没有更新，就不要出现在输出里）
+${existEvents.length ? existEvents.map(n => '- ' + n).join('\n') : '（暂无）'}
+
+【已存在 · 高光】
+${existHighlights.length ? existHighlights.map(n => '- ' + n).join('\n') : '（暂无）'}
+
+【已存在 · 章节】
+${existChapters.length ? existChapters.map(n => '- ' + n).join('\n') : '（暂无）'}
+
+【已存在 · 标签】
+${existTags.length ? existTags.map(n => '- ' + n).join('\n') : '（暂无）'}
+
+【已有 · 故事总纲】${existSummary || '（暂无）'}
+【已有 · 档案（背景/规则/结局）】${existArchive || '（暂无）'}
+【已有 · 主控（本世界身份）】${existProtagonist || '（暂无）'}
+【已有 · 设定碎片】${existWorldArchive || '（暂无）'}
+
+【输出 JSON 结构】（所有字段都要出现，没有的填空字符串 / 空数组 / null）
+
+{
+  "updateTime": "",
+  "subtitle": "",
+  "desc": "",
+  "status": "",
+  "era": "",
+  "tags": [],
+  "archive": {
+    "background": "",
+    "rules": "",
+    "endings": ""
+  },
+  "worldArchive": "",
+  "storySummary": "",
+  "storyNotes": "",
+  "protagonist": {
+    "name": "",
+    "occupation": "",
+    "experience": "",
+    "traits": [],
+    "desc": "",
+    "opening": "",
+    "ending": ""
+  },
+  "characters": [
+    {
+      "name": "",
+      "role": "",
+      "romanceable": false,
+      "starred": false,
+      "relation": "",
+      "surface": "",
+      "inner": "",
+      "quote": "",
+      "detail": "",
+      "favor": null,
+      "firstAppear": ""
+    }
+  ],
+  "events": [
+    {
+      "title": "",
+      "summary": "",
+      "char": "",
+      "rarity": "R",
+      "word": "",
+      "line": "",
+      "type": "normal"
+    }
+  ],
+  "highlights": [
+    {
+      "title": "",
+      "char": "",
+      "desc": ""
+    }
+  ],
+  "chapters": [
+    {
+      "title": "",
+      "content": ""
+    }
+  ],
+  "relations": {
+    "nodes": [],
+    "edges": []
+  },
+  "anchor": "",
+  "linkedIds": []
+}
+
+【字段说明】
+- updateTime：填写本次整理的时间（ISO 格式），可留空由系统自动填。
+- subtitle / desc / status / era：只有原来为空才填，否则填空字符串。
+- tags：只填新增的标签，已存在的不要重复。
+- archive：只补空块，已有内容的块填空字符串。
+- worldArchive：设定碎片，只有原来为空才填完整内容；已有就填空字符串。
+- storySummary：只有原来为空才填；已有就填空字符串。
+- storyNotes：只填新增备注。
+- protagonist：只补空字段，已有内容的字段填空字符串。
+- characters：只填新增角色或已有角色需要补的空字段；已存在且信息完整的角色不要出现。
+- events：只填新增事件；已存在的事件不要出现。
+- highlights：只填新增高光；已存在的不要出现。
+- chapters：只填新增章节；已存在的不要出现。
+- relations：只有原来为空才填，否则填空对象。
+- anchor：只有原来为空才填。
+- linkedIds：只填新增的关联世界 id，没有就填空数组。
+
+【重要】
+- 不要重复输出已有内容。
+- 不要修改标题。
+- 不要输出旧版本的完整清单。
+- 只输出本次新增/补充的部分。
+- 如果某个板块没有新内容，就留空（空字符串/空数组/null）。
+- 只输出纯 JSON。`;
+}
+
+/* ============================================================
+   合并角色
+   ============================================================ */
+function iwMergeCharacters(existArr, incomingArr){
+  if(!Array.isArray(incomingArr)) return { added:0, updated:0, skipped:0 };
+  let added = 0, updated = 0, skipped = 0;
+  existArr = existArr || [];
+
+  incomingArr.forEach(nc => {
+    if(!nc || !nc.name || !String(nc.name).trim()){ skipped++; return; }
+    const name = String(nc.name).trim();
+    const exist = existArr.find(c => c && c.name === name);
+
+    if(exist){
+      let changed = false;
+      ['role','relation','surface','inner','quote','detail','firstAppear','emoji','rarity'].forEach(k => {
+        if(iwIsEmpty(exist[k]) && !iwIsEmpty(nc[k])){ exist[k] = nc[k]; changed = true; }
+      });
+      if(iwIsEmpty(exist.favor) && !iwIsEmpty(nc.favor)){ exist.favor = nc.favor; changed = true; }
+      if((exist.romanceable === undefined || exist.romanceable === null) &&
+         (nc.romanceable !== undefined && nc.romanceable !== null)){
+        exist.romanceable = nc.romanceable; changed = true;
+      }
+      if((exist.starred === undefined || exist.starred === null) &&
+         (nc.starred !== undefined && nc.starred !== null)){
+        exist.starred = nc.starred; changed = true;
+      }
+      if(!Array.isArray(exist.photoIds)) exist.photoIds = [];
+      if(changed) updated++;
+      else skipped++;
+    } else {
+      existArr.push({
+        name: name,
+        role: nc.role || '',
+        relation: nc.relation || '',
+        romanceable: nc.romanceable === true,
+        starred: nc.starred === true,
+        surface: nc.surface || '',
+        inner: nc.inner || '',
+        quote: nc.quote || '',
+        detail: nc.detail || '',
+        favor: iwIsEmpty(nc.favor) ? null : nc.favor,
+        firstAppear: nc.firstAppear || '',
+        emoji: nc.emoji || '',
+        avatarId: null,
+        photoIds: []
+      });
+      added++;
+    }
+  });
+  return { added, updated, skipped };
+}
+
+/* ============================================================
+   合并事件
+   ============================================================ */
+function iwMergeEvents(existArr, incomingArr, rarityOptions){
+  if(!Array.isArray(incomingArr)) return { added:0, updated:0, skipped:0 };
+  let added = 0, updated = 0, skipped = 0;
+  existArr = existArr || [];
+  incomingArr.forEach(ne => {
+    if(!ne || !ne.title || !String(ne.title).trim()){ skipped++; return; }
+    const title = String(ne.title).trim();
+    const exist = existArr.find(e => e && e.title === title);
+    if(exist){
+      let changed = false;
+      ['summary','char','word','line'].forEach(k => {
+        if(iwIsEmpty(exist[k]) && !iwIsEmpty(ne[k])){ exist[k] = ne[k]; changed = true; }
+      });
+      if(iwIsEmpty(exist.rarity) && ne.rarity && (rarityOptions || []).find(r => r.key === ne.rarity)){
+        exist.rarity = ne.rarity; changed = true;
+      }
+      if(!exist.type && ne.type){ exist.type = ne.type; changed = true; }
+      if(changed) updated++; else skipped++;
+    } else {
+      existArr.push({
+        id: 'e_' + Date.now().toString(36) + Math.random().toString(36).slice(2,6),
+        title: title,
+        summary: ne.summary || '',
+        char: ne.char || '',
+        rarity: (rarityOptions || []).find(r => r.key === ne.rarity) ? ne.rarity : 'R',
+        word: ne.word || '',
+        line: ne.line || '',
+        type: ne.type === 'if' ? 'if' : 'normal'
+      });
+      added++;
+    }
+  });
+  return { added, updated, skipped };
+}
+
+/* ============================================================
+   合并高光
+   ============================================================ */
+function iwMergeHighlights(existArr, incomingArr){
+  if(!Array.isArray(incomingArr)) return { added:0, skipped:0 };
+  let added = 0, skipped = 0;
+  existArr = existArr || [];
+  incomingArr.forEach(nh => {
+    if(!nh || !nh.title){ skipped++; return; }
+    const title = String(nh.title).trim();
+    if(existArr.find(h => h && h.title === title)){ skipped++; return; }
+    existArr.push({ title: title, char: nh.char || '', desc: nh.desc || '' });
+    added++;
+  });
+  return { added, skipped };
+}
+
+/* ============================================================
+   合并章节
+   ============================================================ */
+function iwMergeChapters(existArr, incomingArr){
+  if(!Array.isArray(incomingArr)) return { added:0, skipped:0 };
+  let added = 0, skipped = 0;
+  existArr = existArr || [];
+  incomingArr.forEach(nch => {
+    if(!nch) return;
+    const title = String(nch.title || '未命名').trim() || '未命名';
+    if(existArr.find(c => c && c.title === title)){ skipped++; return; }
+    existArr.push({
+      id: 'ch_' + Date.now().toString(36) + Math.random().toString(36).slice(2,6),
+      title: title,
+      content: nch.content || ''
+    });
+    added++;
+  });
+  return { added, skipped };
+}
+
+/* ============================================================
+   核心：应用更新
+   ============================================================ */
+function applyUpdate(w, obj){
+  if(!w || !obj || typeof obj !== 'object'){
+    return { ok:false, msg:'数据无效' };
+  }
+
+  const stats = {
+    chars:{added:0,updated:0,skipped:0},
+    events:{added:0,updated:0,skipped:0},
+    highlights:{added:0,skipped:0},
+    chapters:{added:0,skipped:0}
+  };
+
+  /* 标量：只补空 */
+  iwFillIfEmpty(w, 'subtitle', obj.subtitle);
+  iwFillIfEmpty(w, 'desc', obj.desc);
+  if(iwIsEmpty(w.status) && obj.status) w.status = obj.status;
+  if(iwIsEmpty(w.era) && obj.era) w.era = obj.era;
+
+  /* tags：合并去重 */
+  if(Array.isArray(obj.tags) && obj.tags.length){
+    w.tags = w.tags || [];
+    obj.tags.forEach(t => {
+      const s = String(t).trim();
+      if(s && !w.tags.includes(s)) w.tags.push(s);
+    });
+  }
+
+  /* archive：只补空块 */
+  if(obj.archive && typeof obj.archive === 'object'){
+    w.archive = w.archive || { background:'', rules:'', endings:'' };
+    iwFillIfEmpty(w.archive, 'background', obj.archive.background);
+    iwFillIfEmpty(w.archive, 'rules', obj.archive.rules);
+    iwFillIfEmpty(w.archive, 'endings', obj.archive.endings);
+  }
+
+  /* 设定碎片：只补空 */
+  let wa = obj.worldArchive;
+  if(wa && typeof wa === 'object' && typeof buildArchiveFromFields === 'function'){
+    try{
+      wa = buildArchiveFromFields(wa, {
+        characters: Array.isArray(obj.characters) ? obj.characters.filter(c => c.romanceable !== false) : [],
+        events: Array.isArray(obj.events) ? obj.events : [],
+        archive: obj.archive || {},
+        desc: obj.desc || ''
+      });
+    }catch(e){ wa = ''; }
+  }
+  if(typeof wa === 'string' && wa.trim() && iwIsEmpty(w.worldArchive)){
+    w.worldArchive = wa;
+    w.worldArchiveHistory = w.worldArchiveHistory || [];
+  }
+
+  /* storySummary / storyNotes */
+  iwFillIfEmpty(w, 'storySummary', obj.storySummary);
+  iwFillIfEmpty(w, 'storyNotes', obj.storyNotes);
+
+  /* protagonist：逐字段补空 */
+  if(obj.protagonist && typeof obj.protagonist === 'object'){
+    w.protagonist = w.protagonist || {
+      name:'', occupation:'', experience:'', traits:[], desc:'',
+      opening:'', ending:'', emoji:'🧑', avatarId:null
+    };
+    ['name','occupation','experience','desc','opening','ending']
+      .forEach(k => iwFillIfEmpty(w.protagonist, k, obj.protagonist[k]));
+    if(Array.isArray(obj.protagonist.traits) && obj.protagonist.traits.length){
+      w.protagonist.traits = w.protagonist.traits || [];
+      obj.protagonist.traits.forEach(t => {
+        const s = String(t).trim();
+        if(s && !w.protagonist.traits.includes(s)) w.protagonist.traits.push(s);
+      });
+    }
+    if(!w.protagonist.emoji) w.protagonist.emoji = '🧑';
+  }
+
+  /* 角色 */
+  w.characters = w.characters || [];
+  stats.chars = iwMergeCharacters(w.characters, obj.characters);
+
+  /* 事件 */
+  w.events = w.events || [];
+  stats.events = iwMergeEvents(w.events, obj.events, (typeof rarityOptions !== 'undefined' ? rarityOptions : []));
+
+  /* 高光 */
+  w.highlights = w.highlights || [];
+  stats.highlights = iwMergeHighlights(w.highlights, obj.highlights);
+
+  /* 章节 */
+  w.chapters = w.chapters || [];
+  stats.chapters = iwMergeChapters(w.chapters, obj.chapters);
+
+  /* 关系网：只补空 */
+  if(obj.relations && typeof obj.relations === 'object'){
+    w.relations = w.relations || { nodes:[], edges:[] };
+    if(iwIsEmpty(w.relations.nodes) && Array.isArray(obj.relations.nodes) && obj.relations.nodes.length){
+      w.relations.nodes = obj.relations.nodes;
+    }
+    if(iwIsEmpty(w.relations.edges) && Array.isArray(obj.relations.edges) && obj.relations.edges.length){
+      w.relations.edges = obj.relations.edges;
+    }
+  }
+
+  /* 锚点：只补空 */
+  if(iwIsEmpty(w.anchor) && obj.anchor){
+    if(!obj.protagonist || obj.anchor !== obj.protagonist.name){
+      w.anchor = obj.anchor;
+    }
+  }
+
+  /* linkedIds：合并去重 */
+  if(Array.isArray(obj.linkedIds) && obj.linkedIds.length){
+    w.linkedIds = w.linkedIds || [];
+    obj.linkedIds.forEach(id => {
+      if(id && !w.linkedIds.includes(id)) w.linkedIds.push(id);
+    });
+  }
+
+  /* 记录本次导入时间 */
+  w.lastImportAt = iwNowISO();
+  w.updatedAt = iwNowISO();
+
+  try{ saveJSON(SK_KUAI.WORLDS, worlds); }catch(e){}
+
+  return { ok:true, stats };
+}
+
+/* ============================================================
+   打开"导入更新"弹窗
+   ============================================================ */
+function openImportUpdateModal(worldId){
+  const w = worlds.find(x => x.id === worldId);
+  if(!w){ showToast('找不到世界'); return; }
+  if(w.type !== 'kuai'){
+    showToast('这个功能只对快穿世界有效');
+    return;
+  }
+
+  const boundary = iwGetBoundary(w);
+  const prompt = buildUpdatePrompt(w);
+
+  const tipText = boundary.isCreated
+    ? '（这是世界建立时间，第一次导入用它当分界线）'
+    : '（AI 只整理这个时间之后的新内容）';
+
+  kuaiOpenModal(`
+    <button class="modal-close" onclick="kuaiCloseModal()">✕</button>
+    <div class="iw-import-modal">
+      <div style="font-size:1.2rem;font-weight:600;color:#4f3e2e;margin-bottom:.5rem;">📥 导入更新 · ${iwEsc(w.title)}</div>
+      <div style="font-size:.82rem;color:#8b7a68;margin-bottom:1rem;">只合并新内容，不覆盖已有，不改标题。</div>
+
+      <div class="iw-section">
+        <div class="iw-label">🕐 分界线</div>
+        <div class="iw-lasttime">
+          <span class="iw-time-tag">${iwEsc(boundary.label)}</span>
+          <strong>${iwEsc(boundary.display)}</strong>
+          <span style="font-size:.75rem;color:#b8a392;">${tipText}</span>
+        </div>
+      </div>
+
+      <div class="iw-section">
+        <div class="iw-label">
+          📋 生成更新 JSON 的指令
+          <span class="iw-tip">把这段指令 + 原始正文一起发给 AI</span>
+        </div>
+        <textarea id="iwPromptBox" style="min-height:280px;">${iwEsc(prompt)}</textarea>
+        <div class="iw-actions">
+          <button class="btn btn-sm" onclick="window.__iwCopyPrompt()">📋 复制指令</button>
+          <button class="btn btn-sm btn-secondary" onclick="window.__iwRefreshPrompt('${w.id}')">🔄 刷新指令</button>
+        </div>
+      </div>
+
+      <div class="iw-section">
+        <div class="iw-label">
+          📄 粘贴 AI 返回的 JSON
+          <span class="iw-tip">只贴纯 JSON，不要代码块</span>
+        </div>
+        <textarea id="iwJsonBox" style="min-height:160px;" placeholder='{"subtitle":"","characters":[],"events":[],"highlights":[],"chapters":[]}'></textarea>
+        <div class="iw-actions">
+          <button class="btn" onclick="window.__iwApplyUpdate('${w.id}')">✨ 应用更新</button>
+          <button class="btn btn-secondary" onclick="document.getElementById('iwJsonFile').click()">📂 选择 JSON 文件</button>
+          <input type="file" id="iwJsonFile" accept=".json,application/json" style="display:none" onchange="window.__iwLoadFile(event)">
+        </div>
+        <div class="iw-result" id="iwResult"></div>
+      </div>
+    </div>
+  `);
+}
+
+/* ============================================================
+   弹窗内操作
+   ============================================================ */
+function copyPrompt(){
+  const el = document.getElementById('iwPromptBox');
+  if(!el) return;
+  navigator.clipboard.writeText(el.value).then(
+    () => showToast('已复制'),
+    () => showToast('复制失败，请手动选中复制')
+  );
+}
+
+function refreshPrompt(worldId){
+  const w = worlds.find(x => x.id === worldId);
+  if(!w) return;
+  const el = document.getElementById('iwPromptBox');
+  if(el) el.value = buildUpdatePrompt(w);
+  showToast('指令已刷新');
+}
+
+function loadFile(event){
+  const f = event.target.files[0];
+  if(!f) return;
+  const r = new FileReader();
+  r.onload = e => {
+    const el = document.getElementById('iwJsonBox');
+    if(el) el.value = e.target.result;
+    showToast('已载入');
+  };
+  r.readAsText(f, 'utf-8');
+  event.target.value = '';
+}
+
+function showResult(type, msg){
+  const el = document.getElementById('iwResult');
+  if(!el) return;
+  el.className = 'iw-result show ' + type;
+  el.textContent = msg;
+}
+
+function applyUpdateFromModal(worldId){
+  const w = worlds.find(x => x.id === worldId);
+  if(!w) return;
+
+  const raw = (document.getElementById('iwJsonBox') || {}).value || '';
+  const trimmed = raw.trim();
+  if(!trimmed){ showResult('err', '❌ 请先粘贴 JSON'); return; }
+
+  /* 去掉可能存在的 ```json 包裹 */
+  let cleaned = trimmed;
+  if(cleaned.startsWith('```')){
+    cleaned = cleaned.replace(/^```[a-zA-Z]*\s*/, '').replace(/```\s*$/, '').trim();
+  }
+
+  let obj;
+  try{
+    obj = JSON.parse(cleaned);
+  }catch(e){
+    showResult('err', '❌ JSON 解析失败：' + e.message);
+    return;
+  }
+
+  if(!obj || typeof obj !== 'object'){
+    showResult('err', '❌ 无法识别的 JSON 结构');
+    return;
+  }
+
+  /* 如果 AI 返回了 { "world": {...} } 这种外壳，剥一层 */
+  if(obj.world && typeof obj.world === 'object' && !obj.characters){
+    obj = obj.world;
+  }
+
+  /* 不允许改标题 */
+  delete obj.title;
+
+  const res = applyUpdate(w, obj);
+  if(!res.ok){
+    showResult('err', '❌ ' + res.msg);
+    return;
+  }
+
+  const s = res.stats;
+  const summary =
+    '✅ 已应用更新\n\n' +
+    '🕐 本次导入时间：' + iwNowStr() + '\n' +
+    '（下次导入将以这个时间为新分界线）\n\n' +
+    '👥 角色：新增 ' + s.chars.added + ' · 补全 ' + s.chars.updated + ' · 跳过 ' + s.chars.skipped + '\n' +
+    '📌 事件：新增 ' + s.events.added + ' · 补全 ' + s.events.updated + ' · 跳过 ' + s.events.skipped + '\n' +
+    '✨ 高光：新增 ' + s.highlights.added + ' · 跳过 ' + s.highlights.skipped + '\n' +
+    '📚 章节：新增 ' + s.chapters.added + ' · 跳过 ' + s.chapters.skipped + '\n\n' +
+    '标题保持不变，已有内容没有被覆盖。';
+
+  showResult('ok', summary);
+
+  /* 刷新世界详情页 */
+  try{
+    if(typeof currentDetailWorldId !== 'undefined' && currentDetailWorldId === worldId){
+      if(typeof openDetail === 'function') openDetail(worldId);
+    }
+    if(typeof renderWorldList === 'function') renderWorldList();
+    if(typeof updateSystemBar === 'function') updateSystemBar();
+    if(typeof checkAchievements === 'function') checkAchievements();
+  }catch(e){}
+
+  /* 刷新弹窗里的分界线显示 */
+  setTimeout(() => {
+    const timeEl = document.querySelector('.iw-import-modal .iw-lasttime strong');
+    const tagEl = document.querySelector('.iw-import-modal .iw-lasttime .iw-time-tag');
+    if(timeEl) timeEl.textContent = iwNowStr();
+    if(tagEl) tagEl.textContent = '上次导入时间';
+  }, 50);
+}
+
+/* ============================================================
+   在详情页头部注入"导入更新"按钮
+   ============================================================ */
+function injectButton(){
+  const header = document.querySelector('#page-detail .detail-header .title-row');
+  if(!header) return;
+
+  const eraSel = header.querySelector('.era-select');
+  if(!eraSel) return;
+
+  if(header.querySelector('.iw-import-btn')) return;
+
+  const wid = (typeof currentDetailWorldId !== 'undefined') ? currentDetailWorldId : null;
+  if(!wid) return;
+
+  const w = worlds.find(x => x.id === wid);
+  if(!w || w.type !== 'kuai') return;
+
+  const exportBtn = Array.from(header.querySelectorAll('button')).find(b =>
+    b.textContent.indexOf('导出') >= 0
+  );
+  if(!exportBtn) return;
+
+  const btn = document.createElement('button');
+  btn.className = 'btn btn-sm iw-import-btn';
+  btn.style.background = '#4a7a9a';
+  btn.style.marginLeft = '.1rem';
+  btn.textContent = '📥 导入更新';
+  btn.onclick = () => openImportUpdateModal(wid);
+
+  exportBtn.insertAdjacentElement('afterend', btn);
+}
+
+/* ============================================================
+   监听 DOM 变化，详情页每次渲染后补按钮
+   ============================================================ */
+function watchDetail(){
+  const target = document.getElementById('page-detail');
+  if(!target) return;
+
+  const observer = new MutationObserver(() => {
+    setTimeout(injectButton, 30);
+  });
+  observer.observe(target, { childList: true, subtree: true });
+
+  setTimeout(injectButton, 100);
+}
+
+/* ============================================================
+   暴露给 onclick
+   ============================================================ */
+window.__iwCopyPrompt = copyPrompt;
+window.__iwRefreshPrompt = refreshPrompt;
+window.__iwApplyUpdate = applyUpdateFromModal;
+window.__iwLoadFile = loadFile;
+
+/* ============================================================
+   启动
+   ============================================================ */
+function boot(){
+  watchDetail();
+  console.log('[世界详情 · 导入更新 v2] 已加载。');
+}
+
+if(document.readyState === 'loading'){
+  document.addEventListener('DOMContentLoaded', () => setTimeout(boot, 800));
+} else {
+  setTimeout(boot, 800);
+}
+
+})();
+</script>
 
 </body>
 </html>
